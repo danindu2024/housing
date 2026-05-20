@@ -1,0 +1,13 @@
+{
+  "name": "housing/backend",
+  "description": "API Backend for Village & Housing Development Investigation System",
+  "require": {
+    "php": "^8.2",
+    "vlucas/phpdotenv": "^5.6"
+  },
+  "autoload": {
+    "psr-4": {
+      "App\\": "src/"
+    }
+  }
+}

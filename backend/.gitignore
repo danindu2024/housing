@@ -1,0 +1,29 @@
+# Composer dependencies
+/vendor/
+composer.phar
+
+# Configuration & Secrets
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs/
+
+# IDE/Editor directories and files
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS temporary files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Developer scratch files (optional)
+/scratch/
