@@ -13,20 +13,10 @@ class VillageValidator {
             }
         }
 
-        // Development Project validation (Optional)
-        $validProjects = [
-            '40th Anniversary',
-            '41st Anniversary',
-            'Grama Shakthi',
-            'Grant Model Village',
-            'Loan Model Village',
-            'Adarsha Gammana',
-            'North Province',
-            'Welioya Programme'
-        ];
-        if (!empty($data['development_project']) && trim($data['development_project']) !== '') {
-            if (!in_array(trim($data['development_project']), $validProjects)) {
-                $errors['development_project'][] = 'Invalid development project selected.';
+        // Development Project ID validation (Optional)
+        if (isset($data['development_project_id']) && $data['development_project_id'] !== '') {
+            if (!is_numeric($data['development_project_id']) || (int)$data['development_project_id'] <= 0) {
+                $errors['development_project_id'][] = 'Invalid development project selected.';
             }
         }
 
@@ -57,32 +47,38 @@ class VillageValidator {
         }
 
         // Status enum validation (Optional)
-        $validStatuses = ['IN_PROGRESS', 'COMPLETED', 'INCOMPLETE', 'ABANDONED'];
+        $validStatuses = ['OPEN', 'CLOSED'];
         if (!empty($data['status']) && trim($data['status']) !== '') {
             if (!in_array($data['status'], $validStatuses)) {
                 $errors['status'][] = 'A valid status is required (' . implode(', ', $validStatuses) . ').';
             }
         }
 
-        // GPS checks (Optional)
-        if (isset($data['gps_lat']) && !empty($data['gps_lat']) && !is_numeric($data['gps_lat'])) {
-            $errors['gps_lat'][] = 'GPS Latitude must be a numeric decimal value.';
-        }
-        if (isset($data['gps_lng']) && !empty($data['gps_lng']) && !is_numeric($data['gps_lng'])) {
-            $errors['gps_lng'][] = 'GPS Longitude must be a numeric decimal value.';
+        // Boundary type validation (Optional)
+        $validBoundaries = ['URBAN', 'DS', 'VILLAGE'];
+        if (!empty($data['boundary_type']) && trim($data['boundary_type']) !== '') {
+            if (!in_array($data['boundary_type'], $validBoundaries)) {
+                $errors['boundary_type'][] = 'A valid boundary type is required (URBAN, DS, or VILLAGE).';
+            }
         }
 
+
+        // Infrastructure issues array validation (Optional)
+        $validInfra = ['WATER', 'ELECTRICITY', 'ACCESS_ROADS', 'INTERNAL_ROADS', 'OTHER'];
+        if (isset($data['infrastructure_issues']) && is_array($data['infrastructure_issues'])) {
+            foreach ($data['infrastructure_issues'] as $issue) {
+                if (!in_array($issue, $validInfra)) {
+                    $errors['infrastructure_issues'][] = 'Invalid infrastructure issue selected: ' . $issue;
+                }
+            }
+        }
         // Dates checks (Optional)
         if (isset($data['program_start_date']) && !empty($data['program_start_date'])) {
             if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $data['program_start_date'])) {
                 $errors['program_start_date'][] = 'Program start date must match the format YYYY-MM-DD.';
             }
         }
-        if (isset($data['program_end_date']) && !empty($data['program_end_date'])) {
-            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $data['program_end_date'])) {
-                $errors['program_end_date'][] = 'Program end date must match the format YYYY-MM-DD.';
-            }
-        }
+
 
         return $errors;
     }

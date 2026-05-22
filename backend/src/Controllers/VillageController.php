@@ -12,14 +12,17 @@ class VillageController {
             $filters = $_GET;
 
             $sql = "SELECT v.*, vc.code as category_code, vc.name as category_name,
-                      lob.name as ownership_body_name, lob.code as ownership_body_code,
+                      lob.name_en as ownership_body_name_en, lob.name_si as ownership_body_name_si, lob.name_ta as ownership_body_name_ta, lob.code as ownership_body_code,
                       dv.name as division_name, d.name as district_name,
+                      dp.code as development_project_code, dp.name_en as development_project_name_en,
+                      dp.name_si as development_project_name_si, dp.name_ta as development_project_name_ta,
                       (SELECT COUNT(*) FROM house h WHERE h.village_id = v.id) as total_houses_recorded
                     FROM village v
                     JOIN village_category vc ON v.category_id = vc.id
                     JOIN land_ownership_body lob ON v.ownership_body_id = lob.id
                     JOIN division dv ON v.division_id = dv.id
                     JOIN district d ON dv.district_id = d.id
+                    LEFT JOIN development_project dp ON v.development_project_id = dp.id
                     WHERE 1=1";
             
             $bindings = [];
@@ -40,9 +43,9 @@ class VillageController {
                 $sql .= " AND v.is_conservation_area = :conservation";
                 $bindings['conservation'] = (int)$filters['is_conservation_area'];
             }
-            if (isset($filters['has_infrastructure_issues']) && $filters['has_infrastructure_issues'] !== '') {
-                $sql .= " AND v.has_infrastructure_issues = :infra_issues";
-                $bindings['infra_issues'] = (int)$filters['has_infrastructure_issues'];
+            if (isset($filters['infrastructure_issue']) && $filters['infrastructure_issue'] !== '') {
+                $sql .= " AND JSON_CONTAINS(v.infrastructure_issues, :infra_issue)";
+                $bindings['infra_issue'] = '"' . $filters['infrastructure_issue'] . '"';
             }
 
             $sql .= " ORDER BY v.name";
@@ -66,7 +69,7 @@ class VillageController {
             if (!empty($filters['status'])) $countSql .= " AND v.status = :status";
             if (!empty($filters['division_id']) && is_numeric($filters['division_id'])) $countSql .= " AND v.division_id = :division_id";
             if (isset($filters['is_conservation_area']) && $filters['is_conservation_area'] !== '') $countSql .= " AND v.is_conservation_area = :conservation";
-            if (isset($filters['has_infrastructure_issues']) && $filters['has_infrastructure_issues'] !== '') $countSql .= " AND v.has_infrastructure_issues = :infra_issues";
+            if (isset($filters['infrastructure_issue']) && $filters['infrastructure_issue'] !== '') $countSql .= " AND JSON_CONTAINS(v.infrastructure_issues, :infra_issue)";
 
             $countStmt = $db->prepare($countSql);
             $countStmt->execute($bindings);
@@ -90,12 +93,11 @@ class VillageController {
                 $v['division_id'] = (int)$v['division_id'];
                 $v['category_id'] = (int)$v['category_id'];
                 $v['ownership_body_id'] = (int)$v['ownership_body_id'];
+                $v['development_project_id'] = $v['development_project_id'] ? (int)$v['development_project_id'] : null;
                 $v['total_planned_houses'] = (int)$v['total_planned_houses'];
                 $v['total_houses_recorded'] = (int)$v['total_houses_recorded'];
                 $v['is_conservation_area'] = (bool)$v['is_conservation_area'];
-                $v['has_infrastructure_issues'] = (bool)$v['has_infrastructure_issues'];
-                $v['gps_lat'] = $v['gps_lat'] ? (float)$v['gps_lat'] : null;
-                $v['gps_lng'] = $v['gps_lng'] ? (float)$v['gps_lng'] : null;
+                $v['infrastructure_issues'] = !empty($v['infrastructure_issues']) ? json_decode($v['infrastructure_issues'], true) : [];
                 
                 $v['category'] = [
                     'id' => (int)$v['category_id'],
@@ -105,13 +107,22 @@ class VillageController {
                 $v['ownership_body'] = [
                     'id' => (int)$v['ownership_body_id'],
                     'code' => $v['ownership_body_code'],
-                    'name' => $v['ownership_body_name']
+                    'name_en' => $v['ownership_body_name_en'],
+                    'name_si' => $v['ownership_body_name_si'],
+                    'name_ta' => $v['ownership_body_name_ta']
                 ];
                 $v['division'] = [
                     'id' => (int)$v['division_id'],
                     'name' => $v['division_name'],
                     'district' => $v['district_name']
                 ];
+                $v['development_project'] = $v['development_project_id'] ? [
+                    'id' => $v['development_project_id'],
+                    'code' => $v['development_project_code'],
+                    'name_en' => $v['development_project_name_en'],
+                    'name_si' => $v['development_project_name_si'],
+                    'name_ta' => $v['development_project_name_ta']
+                ] : null;
             }
 
             http_response_code(200);
@@ -140,13 +151,16 @@ class VillageController {
             // Fetch core village info
             $stmt = $db->prepare("
                 SELECT v.*, vc.code as category_code, vc.name as category_name,
-                       lob.name as ownership_body_name, lob.code as ownership_body_code,
-                       dv.name as division_name, d.name as district_name
+                       lob.name_en as ownership_body_name_en, lob.name_si as ownership_body_name_si, lob.name_ta as ownership_body_name_ta, lob.code as ownership_body_code,
+                       dv.name as division_name, d.name as district_name,
+                       dp.code as development_project_code, dp.name_en as development_project_name_en,
+                       dp.name_si as development_project_name_si, dp.name_ta as development_project_name_ta
                 FROM village v
                 JOIN village_category vc ON v.category_id = vc.id
                 JOIN land_ownership_body lob ON v.ownership_body_id = lob.id
                 JOIN division dv ON v.division_id = dv.id
                 JOIN district d ON dv.district_id = d.id
+                LEFT JOIN development_project dp ON v.development_project_id = dp.id
                 WHERE v.id = :id
             ");
             $stmt->execute([':id' => $id]);
@@ -162,9 +176,8 @@ class VillageController {
             $village['id'] = (int)$village['id'];
             $village['total_planned_houses'] = (int)$village['total_planned_houses'];
             $village['is_conservation_area'] = (bool)$village['is_conservation_area'];
-            $village['has_infrastructure_issues'] = (bool)$village['has_infrastructure_issues'];
-            $village['gps_lat'] = $village['gps_lat'] ? (float)$village['gps_lat'] : null;
-            $village['gps_lng'] = $village['gps_lng'] ? (float)$village['gps_lng'] : null;
+            $village['infrastructure_issues'] = !empty($village['infrastructure_issues']) ? json_decode($village['infrastructure_issues'], true) : [];
+            $village['development_project_id'] = $village['development_project_id'] ? (int)$village['development_project_id'] : null;
 
             // Fetch metrics
             $totalHouses = (int)$db->query("SELECT COUNT(*) FROM house WHERE village_id = $id")->fetchColumn();
@@ -227,12 +240,12 @@ class VillageController {
             $db = Database::getConnection();
             $stmt = $db->prepare("
                 INSERT INTO village (division_id, category_id, ownership_body_id, name,
-                  development_project, grama_niladhari_division, gps_lat, gps_lng, total_planned_houses,
-                  status, is_conservation_area, has_infrastructure_issues,
-                  program_start_date, program_end_date, notes)
+                  development_project_id, grama_niladhari_division, total_planned_houses,
+                  status, is_conservation_area, infrastructure_issues, boundary_type,
+                  program_start_date, notes)
                 VALUES (:division_id, :category_id, :ownership_body_id, :name,
-                  :project, :gn_div, :gps_lat, :gps_lng, :total_planned,
-                  :status, :conservation, :infra_issues, :start_date, :end_date, :notes)
+                  :project_id, :gn_div, :total_planned,
+                  :status, :conservation, :infra_issues, :boundary_type, :start_date, :notes)
             ");
             
             $divisionId = !empty($body['division_id']) ? (int)$body['division_id'] : null;
@@ -258,16 +271,14 @@ class VillageController {
                 'category_id'    => $categoryId,
                 'ownership_body_id' => $ownershipBodyId,
                 'name'           => !empty($body['name']) ? trim($body['name']) : 'Draft Village',
-                'project'        => !empty($body['development_project']) ? trim($body['development_project']) : null,
+                'project_id'     => !empty($body['development_project_id']) ? (int)$body['development_project_id'] : null,
                 'gn_div'         => !empty($body['grama_niladhari_division']) ? trim($body['grama_niladhari_division']) : null,
-                'gps_lat'        => isset($body['gps_lat']) && $body['gps_lat'] !== '' ? (float)$body['gps_lat'] : null,
-                'gps_lng'        => isset($body['gps_lng']) && $body['gps_lng'] !== '' ? (float)$body['gps_lng'] : null,
                 'total_planned'  => isset($body['total_planned_houses']) && $body['total_planned_houses'] !== '' ? (int)$body['total_planned_houses'] : 0,
                 'status'         => !empty($body['status']) ? $body['status'] : 'IN_PROGRESS',
                 'conservation'   => (int)($body['is_conservation_area'] ?? 0),
-                'infra_issues'   => (int)($body['has_infrastructure_issues'] ?? 0),
+                'infra_issues'   => (isset($body['infrastructure_issues']) && is_array($body['infrastructure_issues'])) ? json_encode($body['infrastructure_issues']) : null,
+                'boundary_type'  => !empty($body['boundary_type']) ? $body['boundary_type'] : null,
                 'start_date'     => !empty($body['program_start_date']) ? $body['program_start_date'] : null,
-                'end_date'       => !empty($body['program_end_date']) ? $body['program_end_date'] : null,
                 'notes'          => !empty($body['notes']) ? trim($body['notes']) : null,
             ]);
 
