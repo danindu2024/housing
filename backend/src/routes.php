@@ -18,6 +18,7 @@ $router->get('/api/v1/reference/districts', [ReferenceController::class, 'distri
 $router->get('/api/v1/reference/village-categories', [ReferenceController::class, 'villageCategories'], [AuthMiddleware::class]);
 $router->get('/api/v1/reference/land-ownership-bodies', [ReferenceController::class, 'landOwnershipBodies'], [AuthMiddleware::class]);
 $router->get('/api/v1/reference/construction-stages', [ReferenceController::class, 'constructionStages'], [AuthMiddleware::class]);
+$router->get('/api/v1/reference/development-projects', [ReferenceController::class, 'developmentProjects'], [AuthMiddleware::class]);
 
 // --- Villages Management (Protected) ---
 $router->get('/api/v1/villages', [VillageController::class, 'index'], [AuthMiddleware::class]);
