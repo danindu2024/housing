@@ -11,6 +11,8 @@ import LoginPage from './pages/LoginPage';
 import VillageListPage from './pages/VillageListPage';
 import VillageDetailPage from './pages/VillageDetailPage';
 import VillageForm from './components/village/VillageForm';
+import HouseForm from './components/house/HouseForm';
+import LoanForm from './components/loan/LoanForm';
 
 // Global Layout Wrapper for Authenticated Pages
 const AppLayout = ({ children, title }) => {
@@ -94,6 +96,23 @@ function App() {
             element={
               <AppLayout title="Village Details & Houses Ledger">
                 <VillageDetailPage />
+              </AppLayout>
+            }
+          />
+
+          <Route
+            path="/houses/new"
+            element={
+              <AppLayout title="නිවාස ලේකනය - Register House">
+                <HouseForm />
+              </AppLayout>
+            }
+          />
+          <Route
+            path="/loans/new"
+            element={
+              <AppLayout title="ණය / ආටාර ලේකනය - Loan & Grant">
+                <LoanForm />
               </AppLayout>
             }
           />
