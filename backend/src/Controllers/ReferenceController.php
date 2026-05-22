@@ -60,7 +60,7 @@ class ReferenceController {
     public function landOwnershipBodies(): void {
         try {
             $db = Database::getConnection();
-            $bodies = $db->query("SELECT id, code, name, description FROM land_ownership_body ORDER BY id")->fetchAll();
+            $bodies = $db->query("SELECT id, code, name_en, name_si, name_ta, description FROM land_ownership_body ORDER BY id")->fetchAll();
 
             http_response_code(200);
             echo json_encode($bodies);
@@ -85,6 +85,19 @@ class ReferenceController {
         } catch (\PDOException $e) {
             http_response_code(500);
             echo json_encode(['error' => 'Failed to fetch construction stages.']);
+        }
+    }
+
+    public function developmentProjects(): void {
+        try {
+            $db = Database::getConnection();
+            $projects = $db->query("SELECT id, code, name_en, name_si, name_ta FROM development_project WHERE is_active = 1 ORDER BY id")->fetchAll();
+
+            http_response_code(200);
+            echo json_encode($projects);
+        } catch (\PDOException $e) {
+            http_response_code(500);
+            echo json_encode(['error' => 'Failed to fetch development projects: ' . $e->getMessage()]);
         }
     }
 }
