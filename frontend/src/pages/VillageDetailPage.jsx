@@ -142,14 +142,14 @@ const VillageDetailPage = () => {
               <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
                 isLoanVillage ? 'bg-indigo-500 text-white shadow-sm' : 'bg-amber-500 text-white shadow-sm'
               }`}>
-                {village.category_name}
+                {village.category_code === 'LOAN' ? 'ණය' : village.category_code === 'GRANT' ? 'ආධාර' : village.category_name}
               </span>
-              {village.development_project && (
+              {village.development_project_name_si && (
                 <span className="px-2 py-0.5 rounded bg-slate-700 text-slate-100 text-[10px] font-black uppercase tracking-wider shadow-sm">
-                  {village.development_project}
+                  {village.development_project_name_si}
                 </span>
               )}
-              <span className="text-[10px] font-semibold text-slate-400">Owner: {village.ownership_body_name}</span>
+              <span className="text-[10px] font-semibold text-slate-400">Owner: {village.ownership_body_name_si}</span>
             </div>
             <h1 className="text-2xl font-black tracking-tight">{village.name}</h1>
             <p className="text-xs text-slate-400 font-medium">
@@ -191,7 +191,7 @@ const VillageDetailPage = () => {
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Investigative Schedule</span>
             <div className="text-xs text-slate-600 font-semibold space-y-1 mt-1">
               <p>Commenced: {village.program_start_date || 'Unknown'}</p>
-              <p>Completed/Targeted: {village.program_end_date || 'Continuous'}</p>
+
             </div>
           </div>
         </div>

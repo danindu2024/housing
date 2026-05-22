@@ -12,7 +12,7 @@ const VillageListPage = () => {
   const [category, setCategory] = useState('');
   const [status, setStatus] = useState('');
   const [isConservation, setIsConservation] = useState('');
-  const [hasInfraIssues, setHasInfraIssues] = useState('');
+  const [infraIssue, setInfraIssue] = useState('');
 
   // Pagination states
   const [page, setPage] = useState(1);
@@ -31,7 +31,7 @@ const VillageListPage = () => {
       if (category) params.category = category;
       if (status) params.status = status;
       if (isConservation) params.is_conservation_area = isConservation;
-      if (hasInfraIssues) params.has_infrastructure_issues = hasInfraIssues;
+      if (infraIssue) params.infrastructure_issue = infraIssue;
 
       const response = await api.get('/villages', { params });
       setVillages(response.data.data);
@@ -47,29 +47,25 @@ const VillageListPage = () => {
 
   useEffect(() => {
     fetchVillages();
-  }, [page, category, status, isConservation, hasInfraIssues]);
+  }, [page, category, status, isConservation, infraIssue]);
 
   // Handle filter resets
   const resetFilters = () => {
     setCategory('');
     setStatus('');
     setIsConservation('');
-    setHasInfraIssues('');
+    setInfraIssue('');
     setPage(1);
   };
 
   const getStatusBadge = (statusVal) => {
     const badges = {
-      COMPLETED: 'bg-emerald-50 text-emerald-700 border-emerald-100',
-      IN_PROGRESS: 'bg-blue-50 text-blue-700 border-blue-100',
-      INCOMPLETE: 'bg-amber-50 text-amber-700 border-amber-100',
-      ABANDONED: 'bg-rose-50 text-rose-700 border-rose-100',
+      OPEN: 'bg-emerald-50 text-emerald-700 border-emerald-100',
+      CLOSED: 'bg-rose-50 text-rose-700 border-rose-100',
     };
     const labels = {
-      COMPLETED: 'Completed',
-      IN_PROGRESS: 'In Progress',
-      INCOMPLETE: 'Incomplete',
-      ABANDONED: 'Abandoned',
+      OPEN: 'මහජනතාව සඳහා විවෘතයි',
+      CLOSED: 'විවෘත කර නැත',
     };
     return (
       <span className={`px-2.5 py-1 rounded-full text-xs font-semibold border ${badges[statusVal] || 'bg-slate-50 text-slate-700'}`}>
@@ -112,9 +108,9 @@ const VillageListPage = () => {
               onChange={(e) => { setCategory(e.target.value); setPage(1); }}
               className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-medium text-slate-700 bg-slate-50 focus:bg-white focus:ring-indigo-500 focus:border-indigo-500 transition-all"
             >
-              <option value="">All Category Funding</option>
-              <option value="LOAN">Loan Villages</option>
-              <option value="GRANT">Grant Villages</option>
+              <option value="">සියලුම ක්‍රමවේද</option>
+              <option value="LOAN">ණය</option>
+              <option value="GRANT">ආධාර</option>
             </select>
           </div>
 
@@ -124,11 +120,9 @@ const VillageListPage = () => {
               onChange={(e) => { setStatus(e.target.value); setPage(1); }}
               className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-medium text-slate-700 bg-slate-50 focus:bg-white focus:ring-indigo-500 focus:border-indigo-500 transition-all"
             >
-              <option value="">All Project Statuses</option>
-              <option value="IN_PROGRESS">In Progress</option>
-              <option value="COMPLETED">Completed</option>
-              <option value="INCOMPLETE">Incomplete</option>
-              <option value="ABANDONED">Abandoned</option>
+              <option value="">සියලුම ග්‍රාම සංවර්ධන මට්ටම්</option>
+              <option value="OPEN">මහජනතාව සඳහා විවෘතයි</option>
+              <option value="CLOSED">විවෘත කර නැත</option>
             </select>
           </div>
 
@@ -146,18 +140,21 @@ const VillageListPage = () => {
 
           <div>
             <select
-              value={hasInfraIssues}
-              onChange={(e) => { setHasInfraIssues(e.target.value); setPage(1); }}
+              value={infraIssue}
+              onChange={(e) => { setInfraIssue(e.target.value); setPage(1); }}
               className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-medium text-slate-700 bg-slate-50 focus:bg-white focus:ring-indigo-500 focus:border-indigo-500 transition-all"
             >
-              <option value="">All Infrastructures</option>
-              <option value="1">Has Critical Issues</option>
-              <option value="0">No Critical Issues</option>
+              <option value="">සියලුම යටිතල පහසුකම් ගැටළු</option>
+              <option value="WATER">ජලය</option>
+              <option value="ELECTRICITY">විදුලිය</option>
+              <option value="ACCESS_ROADS">ගමට ප්‍රවේශ මාර්ග</option>
+              <option value="INTERNAL_ROADS">අභ්‍යන්තර මාර්ග</option>
+              <option value="OTHER">වෙනත් පොදු පහසුකම්</option>
             </select>
           </div>
         </div>
 
-        {(category || status || isConservation !== '' || hasInfraIssues !== '') && (
+        {(category || status || isConservation !== '' || infraIssue !== '') && (
           <div className="mt-4 pt-4 border-t border-slate-100 flex justify-end">
             <button
               onClick={resetFilters}
@@ -210,7 +207,7 @@ const VillageListPage = () => {
                         <div className="flex items-center gap-2 mt-1 flex-wrap">
                           {v.development_project && (
                             <span className="text-[10px] bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-0.5 rounded font-black uppercase tracking-wide">
-                              {v.development_project}
+                              {v.development_project.name_si}
                             </span>
                           )}
                           <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-medium">
@@ -227,8 +224,10 @@ const VillageListPage = () => {
                     </td>
                     <td className="px-6 py-4.5">
                       <div className="space-y-0.5">
-                        <span className="text-xs font-semibold text-slate-700">{v.category.name}</span>
-                        <p className="text-[10px] text-slate-400 font-medium">Owner: {v.ownership_body.name}</p>
+                        <span className="text-xs font-semibold text-slate-700">
+                          {v.category.code === 'LOAN' ? 'ණය' : v.category.code === 'GRANT' ? 'ආධාර' : v.category.name}
+                        </span>
+                        <p className="text-[10px] text-slate-400 font-medium">Owner: {v.ownership_body.name_si}</p>
                       </div>
                     </td>
                     <td className="px-6 py-4.5">
