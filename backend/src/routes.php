@@ -7,6 +7,7 @@ use App\Controllers\VillageController;
 use App\Controllers\HouseController;
 use App\Controllers\LoanController;
 use App\Controllers\LoanPaymentController;
+use App\Controllers\DashboardController;
 
 /** @var Router $router */
 
@@ -23,12 +24,17 @@ $router->get('/api/v1/reference/development-projects', [ReferenceController::cla
 // --- Villages Management (Protected) ---
 $router->get('/api/v1/villages', [VillageController::class, 'index'], [AuthMiddleware::class]);
 $router->post('/api/v1/villages', [VillageController::class, 'store'], [AuthMiddleware::class]);
+$router->post('/api/v1/villages/bulk', [VillageController::class, 'bulkStore'], [AuthMiddleware::class]);
 $router->get('/api/v1/villages/{id}', [VillageController::class, 'show'], [AuthMiddleware::class]);
+$router->delete('/api/v1/villages/{id}', [VillageController::class, 'destroy'], [AuthMiddleware::class]);
 
 // --- Houses Management (Protected) ---
 $router->get('/api/v1/villages/{village_id}/houses', [HouseController::class, 'index'], [AuthMiddleware::class]);
 $router->post('/api/v1/villages/{village_id}/houses', [HouseController::class, 'store'], [AuthMiddleware::class]);
+$router->post('/api/v1/villages/{village_id}/houses/bulk', [HouseController::class, 'bulkStore'], [AuthMiddleware::class]);
 $router->get('/api/v1/houses/{id}', [HouseController::class, 'show'], [AuthMiddleware::class]);
+$router->post('/api/v1/houses/bulk', [HouseController::class, 'globalBulkStore'], [AuthMiddleware::class]);
+
 $router->put('/api/v1/houses/{id}', [HouseController::class, 'update'], [AuthMiddleware::class]);
 
 // --- Loans Management (Protected) ---
@@ -38,3 +44,8 @@ $router->post('/api/v1/houses/{house_id}/loan', [LoanController::class, 'store']
 // --- Loan Payments Ledger (Protected) ---
 $router->get('/api/v1/loans/{loan_id}/payments', [LoanPaymentController::class, 'index'], [AuthMiddleware::class]);
 $router->post('/api/v1/loans/{loan_id}/payments', [LoanPaymentController::class, 'store'], [AuthMiddleware::class]);
+
+// --- Dashboard (Protected) ---
+$router->get('/api/v1/dashboard/summary', [DashboardController::class, 'summary'], [AuthMiddleware::class]);
+$router->get('/api/v1/dashboard/construction-progress', [DashboardController::class, 'constructionProgress'], [AuthMiddleware::class]);
+
