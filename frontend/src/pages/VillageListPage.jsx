@@ -60,15 +60,15 @@ const VillageListPage = () => {
 
   const getStatusBadge = (statusVal) => {
     const badges = {
-      OPEN: 'bg-emerald-50 text-emerald-700 border-emerald-100',
-      CLOSED: 'bg-rose-50 text-rose-700 border-rose-100',
+      OPEN: 'bg-emerald-50/70 text-emerald-700 border-emerald-100/80 shadow-sm',
+      CLOSED: 'bg-rose-50/70 text-rose-700 border-rose-100/80 shadow-sm',
     };
     const labels = {
       OPEN: 'මහජනතාව සඳහා විවෘතයි',
       CLOSED: 'විවෘත කර නැත',
     };
     return (
-      <span className={`px-2.5 py-1 rounded-full text-xs font-semibold border ${badges[statusVal] || 'bg-slate-50 text-slate-700'}`}>
+      <span className={`px-3 py-1.5 rounded-xl text-xs font-bold border uppercase tracking-wider inline-block ${badges[statusVal] || 'bg-slate-50 text-slate-700'}`}>
         {labels[statusVal] || statusVal}
       </span>
     );
@@ -189,63 +189,84 @@ const VillageListPage = () => {
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                  <th className="px-6 py-4">Village Info</th>
-                  <th className="px-6 py-4">Structure</th>
-                  <th className="px-6 py-4">Regional Division</th>
-                  <th className="px-6 py-4 text-center">Recorded Houses</th>
-                  <th className="px-6 py-4">Status</th>
-                  <th className="px-6 py-4 text-right">Actions</th>
+                <tr className="bg-slate-50/50 border-b border-slate-200 text-xs font-bold text-slate-400 uppercase tracking-wider">
+                  <th className="px-6 py-4.5">Village Info</th>
+                  <th className="px-6 py-4.5">Structure</th>
+                  <th className="px-6 py-4.5">Regional Division</th>
+                  <th className="px-6 py-4.5 text-center">Recorded Houses Progress</th>
+                  <th className="px-6 py-4.5">Status</th>
+                  <th className="px-6 py-4.5 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 text-sm text-slate-600">
+              <tbody className="divide-y divide-slate-100 text-sm text-slate-650">
                 {villages.map((v) => (
-                  <tr key={v.id} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="px-6 py-4.5">
-                      <div>
-                        <span className="font-bold text-slate-800 text-sm">{v.name}</span>
-                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                  <tr key={v.id} className="hover:bg-slate-50/30 transition-colors">
+                    <td className="px-6 py-5.5">
+                      <div className="space-y-1.5">
+                        <span 
+                          onClick={() => navigate(`/villages/${v.id}`)}
+                          className="font-extrabold text-slate-800 text-base hover:text-indigo-650 cursor-pointer transition-colors block"
+                        >
+                          {v.name}
+                        </span>
+                        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                           {v.development_project && (
-                            <span className="text-[10px] bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-0.5 rounded font-black uppercase tracking-wide">
+                            <span className="text-xs bg-indigo-50/70 text-indigo-700 border border-indigo-100/60 px-2.5 py-0.5 rounded-lg font-bold uppercase tracking-wide">
                               {v.development_project.name_si}
                             </span>
                           )}
-                          <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-medium">
+                          <span className="text-xs bg-slate-100/80 text-slate-650 px-2.5 py-0.5 rounded-lg border border-slate-200/50 font-medium">
                             GN: {v.grama_niladhari_division}
                           </span>
                           {v.is_conservation_area && (
-                            <span className="text-[10px] bg-rose-50 text-rose-600 border border-rose-100 px-2 py-0.5 rounded font-medium flex items-center gap-0.5">
+                            <span className="text-xs bg-rose-50/70 text-rose-600 border border-rose-100/60 px-2.5 py-0.5 rounded-lg font-bold flex items-center gap-1 shadow-sm">
                               <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
-                              Conservation Area
+                              Conservation Zone
                             </span>
                           )}
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4.5">
-                      <div className="space-y-0.5">
-                        <span className="text-xs font-semibold text-slate-700">
+                    <td className="px-6 py-5.5">
+                      <div className="space-y-1">
+                        <span className="text-sm font-bold text-slate-700">
                           {v.category.code === 'LOAN' ? 'ණය' : v.category.code === 'GRANT' ? 'ආධාර' : v.category.name}
                         </span>
-                        <p className="text-[10px] text-slate-400 font-medium">Owner: {v.ownership_body.name_si}</p>
+                        <p className="text-xs text-slate-400 font-semibold">Owner: {v.ownership_body.name_si}</p>
                       </div>
                     </td>
-                    <td className="px-6 py-4.5">
-                      <div className="space-y-0.5">
-                        <span className="text-xs font-semibold text-slate-700">{v.division.name}</span>
-                        <p className="text-[10px] text-slate-400 font-medium">{v.division.district} District</p>
+                    <td className="px-6 py-5.5">
+                      <div className="space-y-1">
+                        <span className="text-sm font-bold text-slate-700">{v.division.name}</span>
+                        <p className="text-xs text-slate-400 font-semibold">{v.division.district} District</p>
                       </div>
                     </td>
-                    <td className="px-6 py-4.5 text-center font-semibold text-slate-700">
-                      <span>{v.total_houses_recorded} / {v.total_planned_houses}</span>
+                    <td className="px-6 py-5.5">
+                      <div className="space-y-2 max-w-xs mx-auto">
+                        <div className="flex justify-between items-center text-xs font-bold text-slate-800">
+                          <span>{v.total_houses_recorded} / {v.total_planned_houses} Houses</span>
+                          <span className="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded text-[10px] font-black">
+                            {v.total_planned_houses > 0 ? Math.round((v.total_houses_recorded / v.total_planned_houses) * 100) : 0}%
+                          </span>
+                        </div>
+                        <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden border border-slate-200/50 shadow-inner">
+                          <div 
+                            className="h-full bg-indigo-600 rounded-full transition-all duration-500 shadow-sm shadow-indigo-600/30" 
+                            style={{ width: `${v.total_planned_houses > 0 ? Math.min(100, (v.total_houses_recorded / v.total_planned_houses) * 100) : 0}%` }}
+                          />
+                        </div>
+                      </div>
                     </td>
-                    <td className="px-6 py-4.5">{getStatusBadge(v.status)}</td>
-                    <td className="px-6 py-4.5 text-right">
+                    <td className="px-6 py-5.5">{getStatusBadge(v.status)}</td>
+                    <td className="px-6 py-5.5 text-right">
                       <button
                         onClick={() => navigate(`/villages/${v.id}`)}
-                        className="text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors uppercase tracking-wider"
+                        className="inline-flex items-center gap-1.5 px-4 py-2 border border-slate-200 hover:border-indigo-200 text-xs font-bold text-indigo-650 hover:text-white bg-slate-50/50 hover:bg-indigo-600 rounded-xl transition-all shadow-sm active:scale-95"
                       >
-                        Inspect Site
+                        <span>Inspect Site</span>
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7" />
+                        </svg>
                       </button>
                     </td>
                   </tr>

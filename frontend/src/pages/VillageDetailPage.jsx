@@ -22,6 +22,9 @@ const VillageDetailPage = () => {
 
   // Form Modal States
   const [showHouseModal, setShowHouseModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
 
   // 1. Fetch Village metadata summaries
   const fetchVillageDetail = async () => {
@@ -69,6 +72,21 @@ const VillageDetailPage = () => {
     // Refresh both village counts and houses list in-memory dynamically!
     fetchVillageDetail();
     fetchHousesList();
+  };
+
+  const handleDeleteVillage = async () => {
+    setDeleting(true);
+    setDeleteError('');
+    try {
+      await api.delete(`/villages/${id}`);
+      setShowDeleteModal(false);
+      navigate('/villages');
+    } catch (err) {
+      console.error('Failed to delete village:', err);
+      setDeleteError(err.response?.data?.error || 'ගම්මානය ඉවත් කිරීම අසාර්ථක විය. පද්ධති දෝෂයකි. (Failed to delete village.)');
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const getStageBadge = (stage) => {
@@ -158,6 +176,18 @@ const VillageDetailPage = () => {
           </div>
 
           <div className="flex items-center gap-3 relative z-10">
+            <button
+              onClick={() => {
+                setDeleteError('');
+                setShowDeleteModal(true);
+              }}
+              className="border border-rose-200 hover:border-rose-350 text-rose-500 hover:text-rose-600 font-bold text-xs uppercase tracking-wider px-6 py-3.5 rounded-xl bg-transparent hover:bg-rose-50/20 transition-all flex items-center gap-2 active:scale-95"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+              Delete Village
+            </button>
             <button
               onClick={() => setShowHouseModal(true)}
               className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs uppercase tracking-wider px-6 py-3.5 rounded-xl shadow-lg shadow-indigo-600/10 hover:shadow-indigo-500/20 transition-all flex items-center gap-2"
@@ -387,6 +417,118 @@ const VillageDetailPage = () => {
                 onSuccess={handleHouseCreated}
                 onClose={() => setShowHouseModal(false)}
               />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Custom Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 overflow-hidden flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-md shadow-2xl p-6 space-y-6 animate-scale-in">
+            {/* Header / Icon */}
+            <div className="flex items-center gap-4">
+              <div className={`w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 ${
+                village.summary.total_houses > 0 ? 'bg-amber-50 text-amber-650 border border-amber-100' : 'bg-rose-50 text-rose-600 border border-rose-100'
+              }`}>
+                {village.summary.total_houses > 0 ? (
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                ) : (
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                )}
+              </div>
+              <div>
+                <h3 className="font-extrabold text-slate-800 text-lg">
+                  {village.summary.total_houses > 0 ? 'Cannot Delete Village' : 'Delete Village?'}
+                </h3>
+                <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider mt-0.5">
+                  {village.summary.total_houses > 0 ? 'Action Restricted' : 'Warning Confirm'}
+                </p>
+              </div>
+            </div>
+
+            {/* Error Message if deletion fails */}
+            {deleteError && (
+              <div className="p-3 bg-rose-50 border border-rose-100 rounded-xl text-xs font-semibold text-rose-600 leading-relaxed">
+                {deleteError}
+              </div>
+            )}
+
+            {/* Content Body */}
+            <div className="text-slate-600 text-sm leading-relaxed font-medium">
+              {village.summary.total_houses > 0 ? (
+                <div className="space-y-3">
+                  <p className="font-sinhala">
+                    මෙම ගම්මානය පද්ධතියෙන් ඉවත් කළ නොහැක. මෙම ගම්මානය යටතේ නිවාස <span className="font-black text-rose-600 bg-rose-50 px-2 py-0.5 rounded">{village.summary.total_houses}</span> ක් ලියාපදිංචි කර ඇත.
+                  </p>
+                  <p className="font-sinhala text-xs text-slate-400 font-bold italic">
+                    කරුණාකර ප්‍රථමයෙන් මෙම ගම්මානයට අදාළ සියලුම නිවාස ලියාපදිංචි කිරීම් මකා දමා නැවත උත්සාහ කරන්න.
+                  </p>
+                  <p className="text-xs text-slate-450 mt-2 font-sans">
+                    (This village cannot be deleted because it has {village.summary.total_houses} registered houses in the ledger. Please delete the houses first.)
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <p className="font-sinhala">
+                    මෙම ගම්මානය (<span className="font-bold text-slate-800">"{village.name}"</span>) පද්ධතියෙන් ස්ථිරවම ඉවත් කිරීමට ඔබට අවශ්‍ය බව සහතිකද?
+                  </p>
+                  <p className="font-sinhala text-xs text-slate-450 font-bold italic">
+                    මෙම ක්‍රියාව නැවත කිසිසේත් ආපසු හැරවිය නොහැක.
+                  </p>
+                  <p className="text-xs text-slate-450 mt-2 font-sans">
+                    (Are you sure you want to permanently delete this village? This action is permanent and cannot be undone.)
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Footer Buttons */}
+            <div className="flex items-center gap-3 pt-2 justify-end">
+              {village.summary.total_houses > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteModal(false)}
+                  className="w-full sm:w-auto px-6 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl uppercase tracking-wider transition-colors"
+                >
+                  Close / හරි
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setShowDeleteModal(false)}
+                    disabled={deleting}
+                    className="flex-1 sm:flex-initial px-5 py-2.5 border border-slate-200 text-slate-600 bg-white hover:bg-slate-50 font-bold text-xs rounded-xl uppercase tracking-wider transition-colors"
+                  >
+                    Cancel / අවලංගු කරන්න
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDeleteVillage}
+                    disabled={deleting}
+                    className="flex-1 sm:flex-initial px-6 py-2.5 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 shadow-md shadow-rose-500/10 active:scale-95"
+                  >
+                    {deleting ? (
+                      <>
+                        <div className="w-3.5 h-3.5 border-2 border-rose-200 border-t-white rounded-full animate-spin" />
+                        <span>Deleting...</span>
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                        Delete / මකන්න
+                      </>
+                    )}
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>
