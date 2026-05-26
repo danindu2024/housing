@@ -10,6 +10,7 @@ import Navbar from './components/common/Navbar';
 import LoginPage from './pages/LoginPage';
 import VillageListPage from './pages/VillageListPage';
 import VillageDetailPage from './pages/VillageDetailPage';
+import DashboardPage from './pages/DashboardPage';
 import VillageForm from './components/village/VillageForm';
 import HouseForm from './components/house/HouseForm';
 import LoanForm from './components/loan/LoanForm';
@@ -49,15 +50,6 @@ const AppLayout = ({ children, title }) => {
   );
 };
 
-const DashboardPlaceholder = () => (
-  <div className="bg-white rounded-2xl p-8 border border-slate-200 shadow-sm">
-    <h1 className="text-2xl font-bold text-slate-800">Welcome to the Housing Investigation Portal</h1>
-    <p className="text-slate-500 mt-2">
-      Use the sidebar to register new villages, houses, and loan details. In the next phase, complete aggregate charts and corruption leaders metrics will display here.
-    </p>
-  </div>
-);
-
 function App() {
   return (
     <BrowserRouter>
@@ -71,7 +63,7 @@ function App() {
             path="/dashboard"
             element={
               <AppLayout title="Dashboard Analysis">
-                <DashboardPlaceholder />
+                <DashboardPage />
               </AppLayout>
             }
           />
