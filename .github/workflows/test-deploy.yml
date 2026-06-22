@@ -1,0 +1,30 @@
+name: Test FTP Deployment
+
+on:
+  push:
+    branches:
+      - feat/bulk-upload  # Triggers when you push to your current branch
+
+jobs:
+  test-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # --- Deploy only the test file ---
+      - name: FTP Deploy Test File
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          # Since your FTP account is pointed directly to public_html/housing,
+          # the FTP root directory (/) is already public_html/housing.
+          server-dir: ./
+          local-dir: ./
+          # Only upload the test file, exclude everything else
+          exclude: |
+            **/*
+            !test-deploy-readme.txt

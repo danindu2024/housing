@@ -108,6 +108,14 @@ function App() {
               </AppLayout>
             }
           />
+          <Route
+            path="/officers/new"
+            element={
+              <AppLayout title="නිලධාරී ලේකනය - Officers Registry">
+                <LoanForm />
+              </AppLayout>
+            }
+          />
 
           {/* Catch-all Routing */}
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
