@@ -1,0 +1,63 @@
+# =====================================================================
+# .htaccess for Housing Subdomain (public_html/housing)
+# This file ONLY affects this subdomain. The main site in
+# public_html/ is completely unaffected.
+# =====================================================================
+
+# Disable Directory Browsing
+Options -Indexes
+
+# --- SECURITY HEADERS ---
+<IfModule mod_headers.c>
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
+
+# --- BLOCK ACCESS TO SENSITIVE FILES ---
+# Prevents direct browser access to .env, composer files, package files
+<FilesMatch "(^\.env|composer\.(json|lock)|package\.(json|lock))$">
+    Order Allow,Deny
+    Deny from all
+</FilesMatch>
+
+# --- LITESPEED CACHE BYPASS ---
+# Prevents LiteSpeed from caching the API entry point and React app entry
+<IfModule LiteSpeed>
+    RewriteEngine On
+    RewriteCond %{REQUEST_URI} (index\.php|index\.html) [NC]
+    RewriteRule .* - [E=Cache-Control:no-cache]
+</IfModule>
+
+# --- NO-CACHE FOR API & REACT ENTRY POINTS ---
+# index.html = React app shell, index.php = PHP API entry
+# Both must never be cached to avoid serving stale builds or stale API responses
+<FilesMatch "^(index\.html|index\.php)$">
+    <IfModule mod_headers.c>
+        Header set Cache-Control "no-cache, no-store, must-revalidate"
+        Header set Pragma "no-cache"
+        Header set Expires "0"
+    </IfModule>
+</FilesMatch>
+
+# --- REWRITE RULES ---
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Force HTTPS (subdomain-safe: uses HTTP_HOST, won't affect main site)
+    RewriteCond %{HTTPS} off
+    RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+    # RewriteBase is / because this subdomain's document root IS public_html/housing
+    RewriteBase /
+
+    # 1. Forward /api/* requests to the PHP backend entry point
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^api/(.*)$ backend/public/index.php [L,QSA]
+
+    # 2. Route all other requests to React's index.html (supports React Router)
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule . /index.html [L]
+</IfModule>

@@ -1,0 +1,75 @@
+name: Deploy to cPanel
+
+on:
+  workflow_dispatch: # Allows manual trigger from GitHub Actions tab
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # --- Build Frontend ---
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Frontend Dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Build Frontend
+        env:
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+        run: |
+          cd frontend
+          npm run build
+
+      # --- Build Backend ---
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, xml, ctype, iconv, mysql, pdo_mysql
+
+      - name: Install Composer Dependencies
+        run: |
+          cd backend
+          composer install --no-dev --optimize-autoloader
+
+      # --- Prepare Deployment Directory Structure ---
+      - name: Consolidate files for deployment
+        run: |
+          mkdir deploy_dist
+
+          # Copy built frontend assets to root
+          cp -r frontend/dist/* deploy_dist/
+
+          # Copy backend files (excluding .env so the production .env on the server is never overwritten)
+          mkdir -p deploy_dist/backend
+          rsync -a --exclude='.env' backend/ deploy_dist/backend/
+
+          # Copy .htaccess to root
+          cp .htaccess deploy_dist/
+
+      # --- Deploy via FTP ---
+      # The FTP account is scoped to public_html/housing — this CANNOT affect the main site
+      - name: FTP Deploy
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          server-dir: ./
+          local-dir: ./deploy_dist/
+          exclude: |
+            **/node_modules/**
+            **/tests/**
+            **/.git*
+            **/.env
