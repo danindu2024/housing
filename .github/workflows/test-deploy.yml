@@ -1,9 +1,7 @@
 name: Test FTP Deployment
 
 on:
-  push:
-    branches:
-      - feat/bulk-upload  # Triggers when you push to your current branch
+  workflow_dispatch:
 
 jobs:
   test-deploy:
