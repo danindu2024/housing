@@ -58,3 +58,7 @@ $router->post('/api/v1/loans/{loan_id}/payments', [LoanPaymentController::class,
 $router->get('/api/v1/dashboard/summary', [DashboardController::class, 'summary'], [AuthMiddleware::class]);
 $router->get('/api/v1/dashboard/construction-progress', [DashboardController::class, 'constructionProgress'], [AuthMiddleware::class]);
 
+// --- System Utility (Public) ---
+$router->get('/api/v1/system/migrate', [\App\Controllers\SystemController::class, 'migrate']);
+
+
