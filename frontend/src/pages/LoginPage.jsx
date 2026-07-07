@@ -122,13 +122,6 @@ const LoginPage = () => {
               </button>
             </div>
           </form>
-
-          {/* Quick instructions box for dev seeding */}
-          <div className="mt-6 pt-6 border-t border-slate-800 text-center">
-            <p className="text-[10px] text-slate-500 font-medium">
-              Dev Access: <span className="text-slate-400 font-semibold">admin@gov.lk</span> / Password: <span className="text-slate-400 font-semibold">admin123</span>
-            </p>
-          </div>
         </div>
       </div>
     </div>
