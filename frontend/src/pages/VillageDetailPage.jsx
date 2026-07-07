@@ -166,13 +166,13 @@ const VillageDetailPage = () => {
             </p>
           </div>
 
-          <div className="flex items-center gap-3 relative z-10">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 relative z-10 w-full sm:w-auto">
             <button
               onClick={() => {
                 setDeleteError('');
                 setShowDeleteModal(true);
               }}
-              className="border border-rose-200 hover:border-rose-350 text-rose-500 hover:text-rose-600 font-bold text-xs uppercase tracking-wider px-6 py-3.5 rounded-xl bg-transparent hover:bg-rose-50/20 transition-all flex items-center gap-2 active:scale-95"
+              className="w-full sm:w-auto border border-rose-200 hover:border-rose-350 text-rose-500 hover:text-rose-600 font-bold text-xs uppercase tracking-wider px-6 py-3.5 rounded-xl bg-transparent hover:bg-rose-50/20 transition-all flex items-center justify-center gap-2 active:scale-95"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -181,7 +181,7 @@ const VillageDetailPage = () => {
             </button>
             <button
               onClick={() => navigate(`/villages/${id}/houses/new`)}
-              className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs uppercase tracking-wider px-6 py-3.5 rounded-xl shadow-lg shadow-indigo-600/10 hover:shadow-indigo-500/20 transition-all flex items-center gap-2"
+              className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs uppercase tracking-wider px-6 py-3.5 rounded-xl shadow-lg shadow-indigo-600/10 hover:shadow-indigo-500/20 transition-all flex items-center justify-center gap-2"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
@@ -226,7 +226,7 @@ const VillageDetailPage = () => {
       </div>
 
       {/* Village summary Metrics Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-1">
           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Recorded Houses</span>
           <p className="text-2xl font-black text-slate-800">{village.summary.total_houses} / {village.total_planned_houses}</p>

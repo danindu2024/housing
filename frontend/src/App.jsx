@@ -19,6 +19,7 @@ import HouseRegistrationPage from './pages/HouseRegistrationPage';
 // Global Layout Wrapper for Authenticated Pages
 const AppLayout = ({ children, title }) => {
   const { isAuthenticated, loading } = useAuth();
+  const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
 
   if (loading) {
     return (
@@ -38,12 +39,12 @@ const AppLayout = ({ children, title }) => {
   return (
     <div className="flex bg-slate-50 min-h-screen">
       {/* Dynamic Sidebar */}
-      <Sidebar />
+      <Sidebar isOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen} />
 
       {/* Main Main Content Container */}
       <div className="flex-1 flex flex-col min-w-0">
-        <Navbar title={title} />
-        <main className="p-8 flex-1 overflow-y-auto max-w-7xl w-full mx-auto">
+        <Navbar title={title} onMenuClick={() => setIsSidebarOpen(true)} />
+        <main className="p-4 md:p-8 flex-1 overflow-y-auto max-w-7xl w-full mx-auto">
           {children}
         </main>
       </div>

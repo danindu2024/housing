@@ -218,7 +218,7 @@ const DashboardPage = () => {
     <div className="space-y-8 pb-12">
       {/* Dynamic Interactive Filter Panel */}
       <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 space-y-6">
-        <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 flex items-center gap-2">
             <svg className="w-5 h-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
@@ -501,12 +501,12 @@ const DashboardPage = () => {
 
       {/* Row 3: Construction Progress Funnel (Full Width Horizontal Bar Chart) */}
       <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h4 className="text-sm font-bold text-slate-700 tracking-tight">Construction Development Funnel</h4>
             <p className="text-xs text-slate-400">Total house construction progression across 8 unified phases</p>
           </div>
-          <div className="flex items-center gap-4 text-xs font-semibold text-slate-500">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-xs font-semibold text-slate-500">
             <div className="flex items-center gap-1">
               <div className="w-2.5 h-2.5 bg-indigo-500 rounded-full" />
               Not Started / Under Construction
@@ -555,7 +555,7 @@ const DashboardPage = () => {
               <p className="text-xs text-slate-400">Aggregated cash collections vs active capital investments</p>
             </div>
 
-            <div className="grid grid-cols-3 gap-4 pt-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
               <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Disbursed</p>
                 <h5 className="text-md font-bold text-slate-700 mt-1">{formatLKR(totalDisbursed)}</h5>
