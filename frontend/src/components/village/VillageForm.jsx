@@ -25,8 +25,8 @@ const VillageForm = () => {
       {/* 2. Premium Tabbed Navigation Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800 tracking-tight">Register Housing Village</h1>
-          <p className="text-xs text-slate-400 mt-1">නව ගම්මානයක් පද්ධතියට ලියාපදිංචි කිරීමේ ක්‍රමවේදය තෝරන්න.</p>
+          <h1 className="text-2xl font-bold text-slate-800 tracking-tight">Register Village</h1>
+          <p className="text-sm text-slate-600 mt-1">Select the register method/ නව ගම්මාන ලියාපදිංචි ක්‍රමය තෝරන්න</p>
         </div>
 
         {/* Tab Switcher Selector */}
@@ -42,7 +42,7 @@ const VillageForm = () => {
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
-            තනි ගම්මාන ලියාපදිංචිය
+            Single Village Register
           </button>
           
           <button
@@ -56,7 +56,7 @@ const VillageForm = () => {
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
-            Excel තොග වශයෙන්
+            Excel File Upload
           </button>
         </div>
       </div>
