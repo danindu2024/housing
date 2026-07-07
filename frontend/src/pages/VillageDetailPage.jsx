@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../api/axios';
-import HouseForm from '../components/house/HouseForm';
 
 const VillageDetailPage = () => {
   const { id } = useParams();
@@ -21,7 +20,6 @@ const VillageDetailPage = () => {
   const [isLandSold, setIsLandSold] = useState('');
 
   // Form Modal States
-  const [showHouseModal, setShowHouseModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
@@ -66,13 +64,6 @@ const VillageDetailPage = () => {
   useEffect(() => {
     fetchHousesList();
   }, [id, stageCode, occupancyStatus, isHouseSold, isLandSold]);
-
-  const handleHouseCreated = () => {
-    setShowHouseModal(false);
-    // Refresh both village counts and houses list in-memory dynamically!
-    fetchVillageDetail();
-    fetchHousesList();
-  };
 
   const handleDeleteVillage = async () => {
     setDeleting(true);
@@ -189,7 +180,7 @@ const VillageDetailPage = () => {
               Delete Village
             </button>
             <button
-              onClick={() => setShowHouseModal(true)}
+              onClick={() => navigate(`/villages/${id}/houses/new`)}
               className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs uppercase tracking-wider px-6 py-3.5 rounded-xl shadow-lg shadow-indigo-600/10 hover:shadow-indigo-500/20 transition-all flex items-center gap-2"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -204,10 +195,17 @@ const VillageDetailPage = () => {
         </div>
 
         {/* Environmental Area Alert */}
-        {village.is_conservation_area && (
+        {village.is_conservation_area && village.is_conservation_area !== 'NONE' && (
           <div className="px-8 py-4 bg-rose-500/10 border-b border-rose-100 text-rose-800 text-xs font-semibold flex items-center gap-2.5">
             <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse flex-shrink-0" />
-            <span>WARNING: This housing development is inside a declared Forest/Wildlife Conservation Boundary! Land sales inside this boundary are strictly illegal.</span>
+            <span>සංරක්ෂිත භූමි සීමාව: <span className="font-extrabold">{
+              village.is_conservation_area === 'WILDLIFE' ? 'වන ජීවී භූමි තුල පිහිටයි (Wildlife Land)' :
+              village.is_conservation_area === 'FOREST' ? 'වන සංරක්ෂණ භූමි තුල පිහිටයි (Forest Conservation Land)' :
+              village.is_conservation_area === 'COASTAL' ? 'වෙරල සංරක්ෂණ භූමි තුල පිහිටයි (Coastal Conservation Land)' :
+              village.is_conservation_area === 'ARCHAEOLOGICAL' ? 'පුරාවිද්‍යා භූමි තුල පිහිටයි (Archaeological Land)' :
+              village.is_conservation_area === 'SACRED' ? 'පූජා භූමි තුල පිහිටයි (Sacred Land)' :
+              village.is_conservation_area === 'OTHER' ? 'වෙනත් සංරක්ෂණ භූමි තුල පිහිටයි (Other Conservation Land)' : village.is_conservation_area
+            }</span>. මෙම සීමාවන් තුල ඉඩම් පැවරීම/විකිණීම සපුරා තහනම් වේ. (WARNING: Located inside a Conservation Zone. Land sales here are strictly illegal.)</span>
           </div>
         )}
 
@@ -391,36 +389,7 @@ const VillageDetailPage = () => {
         )}
       </div>
 
-      {/* Register House Sliding Modal */}
-      {showHouseModal && (
-        <div className="fixed inset-0 z-50 overflow-hidden flex items-center justify-end bg-slate-900/50 backdrop-blur-sm">
-          <div className="w-full max-w-xl bg-white h-screen shadow-2xl flex flex-col animate-slide-in">
-            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-              <div>
-                <h3 className="font-bold text-slate-800">Register Allotment House</h3>
-                <p className="text-[10px] text-slate-500 mt-0.5">Initialize a structure in village {village.name}</p>
-              </div>
-              <button
-                onClick={() => setShowHouseModal(false)}
-                className="w-8 h-8 rounded-full hover:bg-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
 
-            <div className="flex-1 p-6 overflow-y-auto">
-              <HouseForm
-                villageId={id}
-                isLoanVillage={isLoanVillage}
-                onSuccess={handleHouseCreated}
-                onClose={() => setShowHouseModal(false)}
-              />
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Delete Confirmation Custom Modal */}
       {showDeleteModal && (
