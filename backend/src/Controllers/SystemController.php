@@ -31,6 +31,38 @@ class SystemController {
                 run_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )");
 
+            // Auto-detect existing databases and mark historical migrations as executed
+            $checkCount = $db->query("SELECT COUNT(*) FROM migration_history")->fetchColumn();
+            if ((int)$checkCount === 0) {
+                $tableCheck = $db->query("SHOW TABLES LIKE 'district'")->fetch();
+                if ($tableCheck) {
+                    $historical = [
+                        '001_initial_schema.sql',
+                        '002_development_project.sql',
+                        '003_land_ownership_localization.sql',
+                        '004_add_ownership_bodies.sql',
+                        '005_remove_gps_fields.sql',
+                        '006_update_village_status_enum.sql',
+                        '007_remove_program_end_date.sql',
+                        '008_update_infrastructure_issues.sql',
+                        '009_multiple_infrastructure_issues.sql',
+                        '010_add_boundary_type.sql',
+                        '011_create_grant_table.sql',
+                        '012_simplify_financial_schema.sql',
+                        '013_create_officer_table.sql',
+                        '014_add_google_map_link.sql',
+                        '015_make_ownership_body_id_nullable.sql',
+                        '016_update_boundary_type_enum.sql',
+                        '017_update_conservation_area_enum.sql',
+                        '018_make_status_nullable.sql'
+                    ];
+                    $ins = $db->prepare("INSERT INTO migration_history (migration_name) VALUES (:name)");
+                    foreach ($historical as $m) {
+                        $ins->execute([':name' => $m]);
+                    }
+                }
+            }
+
             // 2. Fetch already executed migrations
             $stmt = $db->query("SELECT migration_name FROM migration_history");
             $executedMigrations = $stmt->fetchAll(PDO::FETCH_COLUMN);
