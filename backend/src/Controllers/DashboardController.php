@@ -49,12 +49,10 @@ class DashboardController {
             $villageQuery = "
                 SELECT 
                     COUNT(v.id) as total,
-                    SUM(CASE WHEN v.status = 'COMPLETED' THEN 1 ELSE 0 END) as status_completed,
-                    SUM(CASE WHEN v.status = 'INCOMPLETE' THEN 1 ELSE 0 END) as status_incomplete,
-                    SUM(CASE WHEN v.status = 'IN_PROGRESS' THEN 1 ELSE 0 END) as status_in_progress,
-                    SUM(CASE WHEN v.status = 'ABANDONED' THEN 1 ELSE 0 END) as status_abandoned,
+                    SUM(CASE WHEN v.status = 'OPEN' THEN 1 ELSE 0 END) as status_open,
+                    SUM(CASE WHEN v.status = 'CLOSED' THEN 1 ELSE 0 END) as status_closed,
                     SUM(v.total_planned_houses) as total_planned_houses,
-                    SUM(v.is_conservation_area) as conservation_area_villages,
+                    SUM(CASE WHEN v.is_conservation_area <> 'NONE' THEN 1 ELSE 0 END) as conservation_area_villages,
                     SUM(CASE WHEN (v.infrastructure_issues IS NOT NULL AND v.infrastructure_issues <> '[]' AND v.infrastructure_issues <> '') THEN 1 ELSE 0 END) as infra_issue_villages
                 FROM village v
                 JOIN village_category vc ON v.category_id = vc.id
@@ -171,10 +169,8 @@ class DashboardController {
                 'villages' => [
                     'total' => $totalVillages,
                     'category_breakdown' => $categoryBreakdown,
-                    'completed' => (int)($vStats['status_completed'] ?? 0),
-                    'incomplete' => (int)($vStats['status_incomplete'] ?? 0),
-                    'in_progress' => (int)($vStats['status_in_progress'] ?? 0),
-                    'abandoned' => (int)($vStats['status_abandoned'] ?? 0),
+                    'open' => (int)($vStats['status_open'] ?? 0),
+                    'closed' => (int)($vStats['status_closed'] ?? 0),
                     'ownership_breakdown' => $ownershipBreakdown
                 ],
                 'houses' => [
