@@ -1,0 +1,3 @@
+USE housing;
+
+ALTER TABLE village MODIFY COLUMN boundary_type ENUM('MUNICIPAL', 'URBAN', 'DS', 'VILLAGE') DEFAULT NULL;

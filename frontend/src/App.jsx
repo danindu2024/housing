@@ -12,8 +12,9 @@ import VillageListPage from './pages/VillageListPage';
 import VillageDetailPage from './pages/VillageDetailPage';
 import DashboardPage from './pages/DashboardPage';
 import VillageForm from './components/village/VillageForm';
-import HouseForm from './components/house/HouseForm';
 import LoanForm from './components/loan/LoanForm';
+import HouseRegistrationPage from './pages/HouseRegistrationPage';
+
 
 // Global Layout Wrapper for Authenticated Pages
 const AppLayout = ({ children, title }) => {
@@ -78,7 +79,7 @@ function App() {
           <Route
             path="/villages/new"
             element={
-              <AppLayout title="Register New Housing Village">
+              <AppLayout title="Register New Village">
                 <VillageForm />
               </AppLayout>
             }
@@ -91,15 +92,18 @@ function App() {
               </AppLayout>
             }
           />
-
           <Route
-            path="/houses/new"
+            path="/villages/:id/houses/new"
             element={
-              <AppLayout title="නිවාස ලේකනය - Register House">
-                <HouseForm />
+              <AppLayout title="නිවාස ලේඛනය - Register House">
+                <HouseRegistrationPage />
               </AppLayout>
             }
           />
+
+          {/* House registration is done from inside a Village record — no standalone route */}
+          <Route path="/houses/new" element={<Navigate to="/villages" replace />} />
+
           <Route
             path="/loans/new"
             element={

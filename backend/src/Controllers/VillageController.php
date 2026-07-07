@@ -30,7 +30,7 @@ class VillageController {
                       (SELECT COUNT(*) FROM house h WHERE h.village_id = v.id) as total_houses_recorded
                     FROM village v
                     JOIN village_category vc ON v.category_id = vc.id
-                    JOIN land_ownership_body lob ON v.ownership_body_id = lob.id
+                    LEFT JOIN land_ownership_body lob ON v.ownership_body_id = lob.id
                     JOIN division dv ON v.division_id = dv.id
                     JOIN district d ON dv.district_id = d.id
                     LEFT JOIN development_project dp ON v.development_project_id = dp.id
@@ -43,12 +43,8 @@ class VillageController {
                 $bindings['category'] = $filters['category'];
             }
             if (!empty($filters['status'])) {
-                $statusFilter = $filters['status'];
-                if ($statusFilter === 'OPEN') {
-                    $sql .= " AND v.status IN ('IN_PROGRESS', 'COMPLETED')";
-                } elseif ($statusFilter === 'CLOSED') {
-                    $sql .= " AND v.status = 'INCOMPLETE'";
-                } else {
+                $statusFilter = strtoupper(trim($filters['status']));
+                if (in_array($statusFilter, ['OPEN', 'CLOSED'])) {
                     $sql .= " AND v.status = :status";
                     $bindings['status'] = $statusFilter;
                 }
@@ -58,8 +54,14 @@ class VillageController {
                 $bindings['division_id'] = (int)$filters['division_id'];
             }
             if (isset($filters['is_conservation_area']) && $filters['is_conservation_area'] !== '') {
-                $sql .= " AND v.is_conservation_area = :conservation";
-                $bindings['conservation'] = (int)$filters['is_conservation_area'];
+                if ($filters['is_conservation_area'] === '1' || $filters['is_conservation_area'] === 'true') {
+                    $sql .= " AND v.is_conservation_area <> 'NONE'";
+                } elseif ($filters['is_conservation_area'] === '0' || $filters['is_conservation_area'] === 'false') {
+                    $sql .= " AND v.is_conservation_area = 'NONE'";
+                } else {
+                    $sql .= " AND v.is_conservation_area = :conservation";
+                    $bindings['conservation'] = $filters['is_conservation_area'];
+                }
             }
             if (isset($filters['infrastructure_issue']) && $filters['infrastructure_issue'] !== '') {
                 $sql .= " AND JSON_CONTAINS(v.infrastructure_issues, :infra_issue)";
@@ -78,24 +80,28 @@ class VillageController {
                 SELECT COUNT(DISTINCT v.id) 
                 FROM village v
                 JOIN village_category vc ON v.category_id = vc.id
-                JOIN land_ownership_body lob ON v.ownership_body_id = lob.id
+                LEFT JOIN land_ownership_body lob ON v.ownership_body_id = lob.id
                 JOIN division dv ON v.division_id = dv.id
                 WHERE 1=1
             ";
             
             if (!empty($filters['category'])) $countSql .= " AND vc.code = :category";
             if (!empty($filters['status'])) {
-                $statusFilter = $filters['status'];
-                if ($statusFilter === 'OPEN') {
-                    $countSql .= " AND v.status IN ('IN_PROGRESS', 'COMPLETED')";
-                } elseif ($statusFilter === 'CLOSED') {
-                    $countSql .= " AND v.status = 'INCOMPLETE'";
-                } else {
+                $statusFilter = strtoupper(trim($filters['status']));
+                if (in_array($statusFilter, ['OPEN', 'CLOSED'])) {
                     $countSql .= " AND v.status = :status";
                 }
             }
             if (!empty($filters['division_id']) && is_numeric($filters['division_id'])) $countSql .= " AND v.division_id = :division_id";
-            if (isset($filters['is_conservation_area']) && $filters['is_conservation_area'] !== '') $countSql .= " AND v.is_conservation_area = :conservation";
+            if (isset($filters['is_conservation_area']) && $filters['is_conservation_area'] !== '') {
+                if ($filters['is_conservation_area'] === '1' || $filters['is_conservation_area'] === 'true') {
+                    $countSql .= " AND v.is_conservation_area <> 'NONE'";
+                } elseif ($filters['is_conservation_area'] === '0' || $filters['is_conservation_area'] === 'false') {
+                    $countSql .= " AND v.is_conservation_area = 'NONE'";
+                } else {
+                    $countSql .= " AND v.is_conservation_area = :conservation";
+                }
+            }
             if (isset($filters['infrastructure_issue']) && $filters['infrastructure_issue'] !== '') $countSql .= " AND JSON_CONTAINS(v.infrastructure_issues, :infra_issue)";
 
             $countStmt = $db->prepare($countSql);
@@ -119,11 +125,11 @@ class VillageController {
                 $v['id'] = (int)$v['id'];
                 $v['division_id'] = (int)$v['division_id'];
                 $v['category_id'] = (int)$v['category_id'];
-                $v['ownership_body_id'] = (int)$v['ownership_body_id'];
+                $v['ownership_body_id'] = $v['ownership_body_id'] !== null ? (int)$v['ownership_body_id'] : null;
                 $v['development_project_id'] = $v['development_project_id'] ? (int)$v['development_project_id'] : null;
                 $v['total_planned_houses'] = (int)$v['total_planned_houses'];
                 $v['total_houses_recorded'] = (int)$v['total_houses_recorded'];
-                $v['is_conservation_area'] = (bool)$v['is_conservation_area'];
+                $v['is_conservation_area'] = $v['is_conservation_area'];
                 $v['infrastructure_issues'] = !empty($v['infrastructure_issues']) ? json_decode($v['infrastructure_issues'], true) : [];
                 
                 $v['category'] = [
@@ -131,13 +137,13 @@ class VillageController {
                     'code' => $v['category_code'],
                     'name' => $v['category_name']
                 ];
-                $v['ownership_body'] = [
+                $v['ownership_body'] = $v['ownership_body_id'] ? [
                     'id' => (int)$v['ownership_body_id'],
                     'code' => $v['ownership_body_code'],
                     'name_en' => $v['ownership_body_name_en'],
                     'name_si' => $v['ownership_body_name_si'],
                     'name_ta' => $v['ownership_body_name_ta']
-                ];
+                ] : null;
                 $v['division'] = [
                     'id' => (int)$v['division_id'],
                     'name' => $v['division_name'],
@@ -184,7 +190,7 @@ class VillageController {
                        dp.name_si as development_project_name_si, dp.name_ta as development_project_name_ta
                 FROM village v
                 JOIN village_category vc ON v.category_id = vc.id
-                JOIN land_ownership_body lob ON v.ownership_body_id = lob.id
+                LEFT JOIN land_ownership_body lob ON v.ownership_body_id = lob.id
                 JOIN division dv ON v.division_id = dv.id
                 JOIN district d ON dv.district_id = d.id
                 LEFT JOIN development_project dp ON v.development_project_id = dp.id
@@ -202,7 +208,7 @@ class VillageController {
             // Cast parameters
             $village['id'] = (int)$village['id'];
             $village['total_planned_houses'] = (int)$village['total_planned_houses'];
-            $village['is_conservation_area'] = (bool)$village['is_conservation_area'];
+            $village['is_conservation_area'] = $village['is_conservation_area'];
             $village['infrastructure_issues'] = !empty($village['infrastructure_issues']) ? json_decode($village['infrastructure_issues'], true) : [];
             $village['development_project_id'] = $village['development_project_id'] ? (int)$village['development_project_id'] : null;
 
@@ -257,15 +263,7 @@ class VillageController {
 
         $body = $this->sanitizeInput($body);
 
-        // Map frontend legacy statuses ('OPEN'/'CLOSED') to DB standard statuses
-        if (!empty($body['status'])) {
-            $body['status'] = trim($body['status']);
-            if ($body['status'] === 'OPEN') {
-                $body['status'] = 'IN_PROGRESS';
-            } elseif ($body['status'] === 'CLOSED') {
-                $body['status'] = 'INCOMPLETE';
-            }
-        }
+
 
         $errors = VillageValidator::validate($body);
 
@@ -305,7 +303,7 @@ class VillageController {
                         'category_id', 'ownership_body_id', 'development_project_id',
                         'grama_niladhari_division', 'total_planned_houses', 'status',
                         'is_conservation_area', 'infrastructure_issues', 'boundary_type',
-                        'program_start_date', 'notes'
+                        'program_start_date', 'notes', 'google_map_link'
                     ];
 
                     foreach ($fields as $field) {
@@ -313,10 +311,14 @@ class VillageController {
                             $val = $body[$field];
                             if ($field === 'category_id' || $field === 'ownership_body_id' || $field === 'development_project_id') {
                                 $val = $val ? (int)$val : null;
-                            } elseif ($field === 'total_planned_houses' || $field === 'is_conservation_area') {
+                            } elseif ($field === 'total_planned_houses') {
                                 $val = (int)$val;
+                            } elseif ($field === 'is_conservation_area') {
+                                $val = $val ?: 'NONE';
                             } elseif ($field === 'infrastructure_issues' && is_array($val)) {
                                 $val = json_encode($val);
+                            } elseif ($field === 'status') {
+                                $val = in_array(strtoupper(trim($val)), ['YES', 'OPEN']) ? 'OPEN' : 'CLOSED';
                             }
                             $updateFields[] = "`$field` = :$field";
                             $updateBindings[":$field"] = $val;
@@ -359,10 +361,10 @@ class VillageController {
                 INSERT INTO village (division_id, category_id, ownership_body_id, name,
                   development_project_id, grama_niladhari_division, total_planned_houses,
                   status, is_conservation_area, infrastructure_issues, boundary_type,
-                  program_start_date, notes)
+                  program_start_date, notes, google_map_link)
                 VALUES (:division_id, :category_id, :ownership_body_id, :name,
                   :project_id, :gn_div, :total_planned,
-                  :status, :conservation, :infra_issues, :boundary_type, :start_date, :notes)
+                  :status, :conservation, :infra_issues, :boundary_type, :start_date, :notes, :google_map_link)
             ");
 
             $categoryId = !empty($body['category_id']) ? (int)$body['category_id'] : null;
@@ -372,10 +374,6 @@ class VillageController {
             }
 
             $ownershipBodyId = !empty($body['ownership_body_id']) ? (int)$body['ownership_body_id'] : null;
-            if (!$ownershipBodyId) {
-                $ownStmt = $db->query("SELECT id FROM land_ownership_body LIMIT 1");
-                $ownershipBodyId = (int)$ownStmt->fetchColumn() ?: 1;
-            }
 
             $stmt->execute([
                 'division_id'    => $divisionId,
@@ -385,12 +383,13 @@ class VillageController {
                 'project_id'     => !empty($body['development_project_id']) ? (int)$body['development_project_id'] : null,
                 'gn_div'         => !empty($body['grama_niladhari_division']) ? trim($body['grama_niladhari_division']) : null,
                 'total_planned'  => isset($body['total_planned_houses']) && $body['total_planned_houses'] !== '' ? (int)$body['total_planned_houses'] : 0,
-                'status'         => !empty($body['status']) ? $body['status'] : 'IN_PROGRESS',
-                'conservation'   => (int)($body['is_conservation_area'] ?? 0),
+                'status'         => !empty($body['status']) ? (in_array(strtoupper(trim($body['status'])), ['YES', 'OPEN']) ? 'OPEN' : 'CLOSED') : null,
+                'conservation'   => !empty($body['is_conservation_area']) ? $body['is_conservation_area'] : 'NONE',
                 'infra_issues'   => (isset($body['infrastructure_issues']) && is_array($body['infrastructure_issues'])) ? json_encode($body['infrastructure_issues']) : null,
                 'boundary_type'  => !empty($body['boundary_type']) ? $body['boundary_type'] : null,
                 'start_date'     => !empty($body['program_start_date']) ? $body['program_start_date'] : null,
                 'notes'          => !empty($body['notes']) ? trim($body['notes']) : null,
+                'google_map_link'=> !empty($body['google_map_link']) ? trim($body['google_map_link']) : null,
             ]);
 
             $id = $db->lastInsertId();
@@ -441,20 +440,9 @@ class VillageController {
                 $categoryCode = isset($row['category_code']) ? trim($row['category_code']) : '';
                 $ownershipBodyCode = isset($row['ownership_body_code']) ? trim($row['ownership_body_code']) : '';
 
-                $isRowDraft = ($provinceName === '' || $districtName === '' || $divisionName === '' || $categoryCode === '' || $ownershipBodyCode === '');
-                $rawStatus = isset($row['status']) ? trim($row['status']) : 'IN_PROGRESS';
-                if ($rawStatus === 'OPEN') {
-                    $status = 'IN_PROGRESS';
-                } elseif ($rawStatus === 'CLOSED') {
-                    $status = 'INCOMPLETE';
-                } else {
-                    $status = in_array($rawStatus, ['IN_PROGRESS', 'COMPLETED', 'INCOMPLETE', 'ABANDONED']) ? $rawStatus : 'IN_PROGRESS';
-                }
-
-                // If any of the normally mandatory fields are missing, it MUST be INCOMPLETE regardless
-                if ($isRowDraft) {
-                    $status = 'INCOMPLETE';
-                }
+                $isRowDraft = ($provinceName === '' || $districtName === '' || $divisionName === '' || $categoryCode === '');
+                $rawStatus = isset($row['status']) ? strtoupper(trim($row['status'])) : '';
+                $status = in_array($rawStatus, ['YES', 'NO', 'OPEN', 'CLOSED']) ? $rawStatus : null;
 
                 // 3. Resolve Location and validate hierarchy
                 $resolvedDivisionId = null;
@@ -519,16 +507,12 @@ class VillageController {
                 if ($ownershipBodyCode !== '') {
                     $ownStmt = $db->prepare("SELECT id FROM land_ownership_body WHERE code = :code");
                     $ownStmt->execute([':code' => $ownershipBodyCode]);
-                    $ownershipBodyId = $ownStmt->fetchColumn();
+                    $ownershipBodyId = $ownStmt->fetchColumn() ?: null;
                     if (!$ownershipBodyId && !$isRowDraft) {
                         $rowErrors['ownership_body_code'][] = "Invalid ownership body code '{$ownershipBodyCode}'.";
                     }
                 }
 
-                if (!$ownershipBodyId) {
-                    $ownStmt = $db->query("SELECT id FROM land_ownership_body LIMIT 1");
-                    $ownershipBodyId = (int)$ownStmt->fetchColumn() ?: 1;
-                }
 
                 // 6. Construct row array for standard validation
                 $rowData = [
@@ -539,11 +523,12 @@ class VillageController {
                     'grama_niladhari_division' => isset($row['grama_niladhari_division']) ? trim($row['grama_niladhari_division']) : null,
                     'total_planned_houses' => isset($row['total_planned_houses']) ? $row['total_planned_houses'] : null,
                     'status' => $status,
-                    'is_conservation_area' => isset($row['is_conservation_area']) ? (int)$row['is_conservation_area'] : 0,
+                    'is_conservation_area' => (isset($row['is_conservation_area']) && $row['is_conservation_area'] !== '') ? $row['is_conservation_area'] : 'NONE',
                     'infrastructure_issues' => isset($row['infrastructure_issues']) ? $row['infrastructure_issues'] : [],
-                    'boundary_type' => isset($row['boundary_type']) ? trim($row['boundary_type']) : null,
+                    'boundary_type' => isset($row['boundary_type']) && trim($row['boundary_type']) !== '' ? trim($row['boundary_type']) : null,
                     'program_start_date' => isset($row['program_start_date']) && trim($row['program_start_date']) !== '' ? trim($row['program_start_date']) : null,
                     'notes' => isset($row['notes']) ? trim($row['notes']) : null,
+                    'google_map_link' => isset($row['google_map_link']) ? trim($row['google_map_link']) : null,
                 ];
 
                 // 7. Run standard backend validations
@@ -576,10 +561,10 @@ class VillageController {
                 INSERT INTO village (division_id, category_id, ownership_body_id, name,
                   grama_niladhari_division, total_planned_houses,
                   status, is_conservation_area, infrastructure_issues, boundary_type,
-                  program_start_date, notes)
+                  program_start_date, notes, google_map_link)
                 VALUES (:division_id, :category_id, :ownership_body_id, :name,
                   :gn_div, :total_planned,
-                  :status, :conservation, :infra_issues, :boundary_type, :start_date, :notes)
+                  :status, :conservation, :infra_issues, :boundary_type, :start_date, :notes, :google_map_link)
             ");
 
             // Prepare duplicate checking statement
@@ -607,7 +592,8 @@ class VillageController {
                         $fields = [
                             'category_id', 'ownership_body_id', 'grama_niladhari_division', 
                             'total_planned_houses', 'status', 'is_conservation_area', 
-                            'infrastructure_issues', 'boundary_type', 'program_start_date', 'notes'
+                            'infrastructure_issues', 'boundary_type', 'program_start_date', 'notes',
+                            'google_map_link'
                         ];
 
                         foreach ($fields as $field) {
@@ -615,6 +601,8 @@ class VillageController {
                                 $val = $rowData[$field];
                                 if ($field === 'infrastructure_issues' && is_array($val)) {
                                     $val = json_encode($val);
+                                } elseif ($field === 'status') {
+                                    $val = in_array(strtoupper(trim($val)), ['YES', 'OPEN']) ? 'OPEN' : 'CLOSED';
                                 }
                                 $updateFields[] = "`$field` = :$field";
                                 $updateBindings[":$field"] = $val;
@@ -640,12 +628,13 @@ class VillageController {
                         'name'              => $rowData['name'],
                         'gn_div'            => $rowData['grama_niladhari_division'],
                         'total_planned'     => $rowData['total_planned_houses'] !== '' && $rowData['total_planned_houses'] !== null ? (int)$rowData['total_planned_houses'] : 0,
-                        'status'            => $rowData['status'],
+                        'status'            => !empty($rowData['status']) ? (in_array(strtoupper(trim($rowData['status'])), ['YES', 'OPEN']) ? 'OPEN' : 'CLOSED') : null,
                         'conservation'      => $rowData['is_conservation_area'],
                         'infra_issues'      => !empty($rowData['infrastructure_issues']) ? json_encode($rowData['infrastructure_issues']) : null,
                         'boundary_type'     => $rowData['boundary_type'],
                         'start_date'        => $rowData['program_start_date'],
                         'notes'             => $rowData['notes'],
+                        'google_map_link'   => $rowData['google_map_link'],
                     ]);
                     $insertedCount++;
                 }

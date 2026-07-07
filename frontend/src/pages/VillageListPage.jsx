@@ -132,9 +132,15 @@ const VillageListPage = () => {
               onChange={(e) => { setIsConservation(e.target.value); setPage(1); }}
               className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-medium text-slate-700 bg-slate-50 focus:bg-white focus:ring-indigo-500 focus:border-indigo-500 transition-all"
             >
-              <option value="">All Environmental Zones</option>
-              <option value="1">Inside Conservation Area</option>
-              <option value="0">Outside Conservation Area</option>
+              <option value="">සියලුම පරිසර කලාප (All Env Zones)</option>
+              <option value="1">සංරක්ෂිත කලාප තුල (Inside Conservation)</option>
+              <option value="0">සංරක්ෂිත නොවන (Outside Conservation)</option>
+              <option value="WILDLIFE">වන ජීවී (Wildlife)</option>
+              <option value="FOREST">වන සංරක්ෂණ (Forest)</option>
+              <option value="COASTAL">වෙරල සංරක්ෂණ (Coastal)</option>
+              <option value="ARCHAEOLOGICAL">පුරාවිද්‍යා (Archaeological)</option>
+              <option value="SACRED">පූජා භූමි (Sacred Land)</option>
+              <option value="OTHER">වෙනත් සංරක්ෂණ (Other)</option>
             </select>
           </div>
 
@@ -218,10 +224,14 @@ const VillageListPage = () => {
                           <span className="text-xs bg-slate-100/80 text-slate-650 px-2.5 py-0.5 rounded-lg border border-slate-200/50 font-medium">
                             GN: {v.grama_niladhari_division}
                           </span>
-                          {v.is_conservation_area && (
+                          {v.is_conservation_area && v.is_conservation_area !== 'NONE' && (
                             <span className="text-xs bg-rose-50/70 text-rose-600 border border-rose-100/60 px-2.5 py-0.5 rounded-lg font-bold flex items-center gap-1 shadow-sm">
                               <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
-                              Conservation Zone
+                              {v.is_conservation_area === 'WILDLIFE' ? 'වන ජීවී' :
+                               v.is_conservation_area === 'FOREST' ? 'වන සංරක්ෂණ' :
+                               v.is_conservation_area === 'COASTAL' ? 'වෙරල සංරක්ෂණ' :
+                               v.is_conservation_area === 'ARCHAEOLOGICAL' ? 'පුරාවිද්‍යා' :
+                               v.is_conservation_area === 'SACRED' ? 'පූජා භූමි' : 'සංරක්ෂිත කලාපය'}
                             </span>
                           )}
                         </div>

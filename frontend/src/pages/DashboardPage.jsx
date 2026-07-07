@@ -147,10 +147,8 @@ const DashboardPage = () => {
   // Color Palette Constants for Premium Look
   const COLORS_PRIMARY = ['#6366f1', '#a855f7', '#f43f5e', '#10b981', '#f59e0b', '#3b82f6'];
   const COLORS_STATUS = {
-    COMPLETED: '#10b981',
-    IN_PROGRESS: '#3b82f6',
-    INCOMPLETE: '#f59e0b',
-    ABANDONED: '#f43f5e',
+    OPEN: '#10b981',
+    CLOSED: '#94a3b8',
   };
 
   // Loading Overlay
@@ -173,10 +171,8 @@ const DashboardPage = () => {
 
   const statusChartData = summaryData
     ? [
-        { name: 'Completed', value: summaryData.villages.completed, color: COLORS_STATUS.COMPLETED },
-        { name: 'In Progress', value: summaryData.villages.in_progress, color: COLORS_STATUS.IN_PROGRESS },
-        { name: 'Incomplete', value: summaryData.villages.incomplete, color: COLORS_STATUS.INCOMPLETE },
-        { name: 'Abandoned', value: summaryData.villages.abandoned, color: COLORS_STATUS.ABANDONED },
+        { name: 'Open / විවෘතයි', value: summaryData.villages.open, color: COLORS_STATUS.OPEN },
+        { name: 'Closed / විවෘත නොවේ', value: summaryData.villages.closed, color: COLORS_STATUS.CLOSED },
       ].filter((d) => d.value > 0)
     : [];
 
@@ -310,17 +306,15 @@ const DashboardPage = () => {
 
           {/* Status */}
           <div className="space-y-1.5">
-            <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Village Status</label>
+            <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Public Access</label>
             <select
               value={selectedStatus}
               onChange={(e) => setSelectedStatus(e.target.value)}
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all cursor-pointer"
             >
-              <option value="">All Statuses</option>
-              <option value="IN_PROGRESS">In Progress</option>
-              <option value="COMPLETED">Completed</option>
-              <option value="INCOMPLETE">Incomplete</option>
-              <option value="ABANDONED">Abandoned</option>
+              <option value="">All Public Access Statuses</option>
+              <option value="OPEN">Open / විවෘතයි</option>
+              <option value="CLOSED">Closed / විවෘත නොවේ</option>
             </select>
           </div>
 
@@ -456,7 +450,7 @@ const DashboardPage = () => {
 
         {/* Status Breakdown (Donut Chart) */}
         <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 space-y-4">
-          <h4 className="text-sm font-bold text-slate-700 tracking-tight">Village Execution Status</h4>
+          <h4 className="text-sm font-bold text-slate-700 tracking-tight">Public Access Status</h4>
           <div className="h-64 flex items-center justify-center relative">
             {statusChartData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">

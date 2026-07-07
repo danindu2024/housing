@@ -6,17 +6,15 @@ class VillageValidator {
     public static function validate(array $data): array {
         $errors = [];
 
-        // Resolve status first (defaults to IN_PROGRESS if not specified)
-        $status = !empty($data['status']) ? trim($data['status']) : 'IN_PROGRESS';
-        $isDraft = ($status === 'INCOMPLETE');
-
-        // Status enum validation (aligned with DB DDL ENUM)
-        $validStatuses = ['IN_PROGRESS', 'COMPLETED', 'INCOMPLETE', 'ABANDONED'];
-        if (!empty($data['status']) && trim($data['status']) !== '') {
+        // Status enum validation (Optional)
+        $validStatuses = ['OPEN', 'CLOSED', 'YES', 'NO'];
+        if (isset($data['status']) && trim($data['status']) !== '') {
             if (!in_array($data['status'], $validStatuses)) {
                 $errors['status'][] = 'A valid status is required (' . implode(', ', $validStatuses) . ').';
             }
         }
+
+        $isDraft = false;
 
         // Name validation (Mandatory for all states)
         if (empty($data['name']) || trim($data['name']) === '') {
@@ -55,25 +53,13 @@ class VillageValidator {
             }
         }
 
-        // Ownership Body ID validation
-        if (!$isDraft) {
-            if (empty($data['ownership_body_id']) || !is_numeric($data['ownership_body_id']) || (int)$data['ownership_body_id'] <= 0) {
-                $errors['ownership_body_id'][] = 'A valid government land ownership body is required.';
-            }
-        } else {
-            if (isset($data['ownership_body_id']) && $data['ownership_body_id'] !== '' && $data['ownership_body_id'] !== null) {
-                if (!is_numeric($data['ownership_body_id']) || (int)$data['ownership_body_id'] <= 0) {
-                    $errors['ownership_body_id'][] = 'A valid government land ownership body is required.';
-                }
+        // Ownership Body ID validation (Optional for all states)
+        if (isset($data['ownership_body_id']) && $data['ownership_body_id'] !== '' && $data['ownership_body_id'] !== null) {
+            if (!is_numeric($data['ownership_body_id']) || (int)$data['ownership_body_id'] <= 0) {
+                $errors['ownership_body_id'][] = 'A valid government land ownership body must be selected if provided.';
             }
         }
 
-        // Development Project ID validation (Optional for all states)
-        if (isset($data['development_project_id']) && $data['development_project_id'] !== '' && $data['development_project_id'] !== null) {
-            if (!is_numeric($data['development_project_id']) || (int)$data['development_project_id'] <= 0) {
-                $errors['development_project_id'][] = 'Invalid development project selected.';
-            }
-        }
 
         // House Count validation
         if (!$isDraft) {
@@ -90,12 +76,19 @@ class VillageValidator {
             }
         }
 
-        // Boundary type validation (Optional for all states)
-        $validBoundaries = ['URBAN', 'DS', 'VILLAGE'];
-        if (!empty($data['boundary_type']) && trim($data['boundary_type']) !== '') {
+        // Boundary type validation (Optional)
+        $validBoundaries = ['MUNICIPAL', 'URBAN', 'DS', 'VILLAGE'];
+        if (isset($data['boundary_type']) && trim($data['boundary_type']) !== '') {
             if (!in_array($data['boundary_type'], $validBoundaries)) {
-                $errors['boundary_type'][] = 'A valid boundary type is required (URBAN, DS, or VILLAGE).';
+                $errors['boundary_type'][] = 'A valid boundary type is required (MUNICIPAL, URBAN, DS, or VILLAGE).';
             }
+        }
+
+        // Conservation area validation (Optional — defaults to NONE in the controller if omitted)
+        $validConservationTypes = ['NONE', 'WILDLIFE', 'FOREST', 'COASTAL', 'ARCHAEOLOGICAL', 'SACRED', 'OTHER'];
+        $conservationType = !empty($data['is_conservation_area']) ? $data['is_conservation_area'] : 'NONE';
+        if (!in_array($conservationType, $validConservationTypes)) {
+            $errors['is_conservation_area'][] = 'Invalid conservation area type selected.';
         }
 
         // Infrastructure issues array validation (Optional for all states)
@@ -112,6 +105,13 @@ class VillageValidator {
         if (isset($data['program_start_date']) && !empty($data['program_start_date'])) {
             if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $data['program_start_date'])) {
                 $errors['program_start_date'][] = 'Program start date must match the format YYYY-MM-DD.';
+            }
+        }
+
+        // Google map link validation (Optional, but must be valid URL if provided)
+        if (isset($data['google_map_link']) && trim($data['google_map_link']) !== '') {
+            if (!filter_var($data['google_map_link'], FILTER_VALIDATE_URL)) {
+                $errors['google_map_link'][] = 'Invalid Google Map link format. It must be a valid URL.';
             }
         }
 
