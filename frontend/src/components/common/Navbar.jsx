@@ -13,17 +13,6 @@ const Navbar = ({ title }) => {
 
       {/* Profile & Settings Details */}
       <div className="flex items-center gap-6">
-        {/* Simple live/local clock display */}
-        <div className="text-right hidden md:block">
-          <p className="text-xs text-slate-500 font-medium">Local Reporting Time</p>
-          <p className="text-xs font-semibold text-slate-700 mt-0.5">
-            {new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-          </p>
-        </div>
-
-        {/* Vertical divider */}
-        <span className="h-8 w-px bg-slate-200 hidden md:block" />
-
         {/* User Card */}
         {user && (
           <div className="flex items-center gap-3">
