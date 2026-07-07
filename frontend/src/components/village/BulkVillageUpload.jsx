@@ -18,25 +18,28 @@ const BulkVillageUpload = () => {
   const [successMsg, setSuccessMsg] = useState('');
   const [validationErrors, setValidationErrors] = useState(null);
 
+
+
   // 1. Dual-Header Specifications
   const headers1 = [
-    'පිහිටීම', '', '', '', '', // Col A to E (merged)
-    'මුදල් සම්ප්‍රාදන ක්‍රමය', '', '', // Col F to H (merged - now 3 columns)
-    'ඉඩමේ හිමිකාරීත්වය', '', '', '', '', // Col I to M (merged)
-    'ගමේ පිහිටීමේ සීමාව', '', '', // Col N to P (merged)
-    'ග්‍රාම සංවර්ධන මට්ටම', '', // Col Q to R (merged)
-    'යටිතල පහසුකම්', '', '', '', '', // Col S to W (merged)
-    'වෙනත් තොරතුරු', '', '', '' // Col X to AA (merged)
+    'පිහිටීම / Location', '', '', '', '', '', // Col A to F (merged)
+    'මුදල් සම්ප්‍රාදන ක්‍රමය/ Funding Method', '', '', // Col G to I (merged)
+    'ඉඩමේ හිමිකාරීත්වය/ Land Ownership', '', '', '', '', // Col J to N (merged)
+    'ගමේ පිහිටීමේ සීමාව/ Village Boundary', '', '', '', // Col O to R (merged)
+    'මහජනතාවට විවෘතද?/ Is Open to Public?', // Col S (single column - dropdown)
+    'යටිතල පහසුකම්/ Infrastructure', '', '', '', '', // Col T to X (merged)
+    'වෙනත් තොරතුරු/ Other Information', '', '', '' // Col Y to AB (merged)
   ];
 
   const headers2 = [
-    'නම', 'පළාත', 'දිස්ත්‍රික්කය', 'ප්‍රාදේශීය ලේකම් කොට්ඨාශය', 'ග්‍රාමනිළධාරී කොට්ඨාශය',
+    'ගම්මානයේ නම/ Village Name', 'පළාත/ Province', 'දිස්ත්‍රික්කය/ District', 'ප්‍රාදේශීය ලේකම් කොට්ඨාශය/ DS Division', 'ග්‍රාමනිළධාරී කොට්ඨාශය/ GN Division',
+    'Google Map Link',
     'ණය ගම්මාන', 'ඉන්දියන් ආධාර', 'නිවාස අධිකාරියේ ආධාර',
     'ප්‍රාදේශීය ලේකම් කොට්ඨාශය', 'මහවැලි අධිකාරිය', 'ඉඩම් ප්‍රතිසංස්කරණ කොමිෂන් සභාව', 'ජාතික නිවාස සංවර්ධන අධිකාරිය', 'වනජීවී සංරක්ෂණ දෙපාර්තමේන්තුව',
-    'මහනගර සභාව', 'ප්‍රාදේශීය සභාව', 'දුෂ්කර ගම්මාන',
-    'මහජනතාව සඳහා විවෘතයි', 'විවෘත කර නැත',
+    'මහනගර සභාව', 'නගරසභාව', 'ප්‍රාදේශීය සභාව', 'දුෂ්කර ගම්මාන',
+    'YES / NO',
     'ජලය', 'විදුලිය', 'ගමට ප්‍රවේශ මාර්ග', 'අභ්‍යන්තර මාර්ග', 'වෙනත් පොදු පහසුකම්',
-    'ඉදිකිරීමට සැළසුම්කල නිවාස සංඛ්‍යාව', 'මුල්ගල් තැබු දිනය', 'ගම වනජීවී/සංරක්ෂණ බලසීමා තුල පිහිටයි(YES/NO)', 'වෙනත් සටහන්'
+    'ඉදිකිරීමට සැළසුම්කල නිවාස සංඛ්‍යාව', 'මුල්ගල් තැබු දිනය', 'සංරක්ෂිත භූමි තුල පිහිටීම', 'වෙනත් සටහන්'
   ];
 
   const sampleRow = [
@@ -45,28 +48,29 @@ const BulkVillageUpload = () => {
     'Kandy', // දිස්ත්‍රික්කය (District) - index 2
     'Kundasale', // ප්‍රාදේශීය ලේකම් කොට්ඨාශය (DS Division) - index 3
     '702 - Gonawala', // ග්‍රාමනිළධාරී කොට්ඨාශය (GN Division) - index 4
-    'YES', // ණය ගම්මාන - index 5
-    'NO', // ඉන්දියන් ආධාර - index 6
-    'NO', // නිවාස අධිකාරියේ ආධාර - index 7
-    'YES', // ප්‍රාදේශීය ලේකම් කොට්ඨාශය (ownership) - index 8
-    'NO', // මහවැලි අධිකාරිය - index 9
-    'NO', // ඉඩම් ප්‍රතිසංස්කරණ කොමිෂන් සභාව - index 10
-    'NO', // ජාතික නිවාස සංවර්ධන අධිකාරිය - index 11
-    'NO', // වනජීවී සංරක්ෂණ දෙපාර්තමේන්තුව - index 12
-    'NO', // මහනගර සභාව - index 13
-    'YES', // ප්‍රාදේශීය සභාව - index 14
-    'NO', // දුෂ්කර ගම්මාන - index 15
-    'YES', // මහජනතාව සඳහා විවෘතයි - index 16
-    'NO', // විවෘත කර නැත - index 17
-    'YES', // ජලය - index 18
-    'YES', // විදුලිය - index 19
-    'NO', // ගමට ප්‍රවේශ මාර්ග - index 20
-    'NO', // අභ්‍යන්තර මාර්ග - index 21
-    'NO', // වෙනත් පොදු පහසුකම් - index 22
-    '50', // ඉදිකිරීමට සැළසුම්කල නිවාස සංඛ්‍යාව - index 23
-    '2026-05-25', // මුල්ගල් තැබු දිනය - index 24
-    'NO', // ගම වනජීවී/සංරක්ෂණ බලසීමා තුල පිහිටයි(YES/NO) - index 25
-    'නව නිවාස සංවර්ධන කටයුතු ප්‍රගතියේ පවතී.' // වෙනත් සටහන් - index 26
+    'https://maps.google.com/?q=7.2906,80.6337', // Google Map Link - index 5
+    'YES', // ණය ගම්මාන - index 6
+    'NO',  // ඉන්දියන් ආධාර - index 7
+    'NO',  // නිවාස අධිකාරියේ ආධාර - index 8
+    'YES', // ප්‍රාදේශීය ලේකම් කොට්ඨාශය (ownership) - index 9
+    'NO',  // මහවැලි අධිකාරිය - index 10
+    'NO',  // ඉඩම් ප්‍රතිසංස්කරණ කොමිෂන් සභාව - index 11
+    'NO',  // ජාතික නිවාස සංවර්ධන අධිකාරිය - index 12
+    'NO',  // වනජීවී සංරක්ෂණ දෙපාර්තමේන්තුව - index 13
+    'NO',  // මහනගර සභාව - index 14
+    'NO',  // නගරසභාව - index 15
+    'YES', // ප්‍රාදේශීය සභාව - index 16
+    'NO',  // දුෂ්කර ගම්මාන - index 17
+    'YES', // ප්‍රවේශය (Status dropdown: YES or NO) - index 18
+    'YES', // ජලය - index 19
+    'YES', // විදුලිය - index 20
+    'NO',  // ගමට ප්‍රවේශ මාර්ග - index 21
+    'NO',  // අභ්‍යන්තර මාර්ග - index 22
+    'NO',  // වෙනත් පොදු පහසුකම් - index 23
+    '50', // ඉදිකිරීමට සැළසුම්කල නිවාස සංඛ්‍යාව - index 24
+    '2026-05-25', // මුල්ගල් තැබු දිනය - index 25
+    'NONE', // සංරක්ෂිත භූමි තුල පිහිටීම (NONE / WILDLIFE / FOREST / COASTAL / ARCHAEOLOGICAL / SACRED / OTHER) - index 26
+    'නව නිවාස සංවර්ධන කටයුතු ප්‍රගතියේ පවතී.' // වෙනත් සටහන් - index 27
   ];
 
   // Helper: check if cell value counts as checked
@@ -94,13 +98,13 @@ const BulkVillageUpload = () => {
 
     // Set Merges
     ws['!merges'] = [
-      { s: { r: 0, c: 0 }, e: { r: 0, c: 4 } },   // පිහිටීම (A1:E1)
-      { s: { r: 0, c: 5 }, e: { r: 0, c: 7 } },   // මුදල් සම්ප්‍රාදන ක්‍රමය (F1:H1)
-      { s: { r: 0, c: 8 }, e: { r: 0, c: 12 } },  // ඉඩමේ හිමිකාරීත්වය (I1:M1)
-      { s: { r: 0, c: 13 }, e: { r: 0, c: 15 } }, // ගමේ පිහිටීමේ සීමාව (N1:P1)
-      { s: { r: 0, c: 16 }, e: { r: 0, c: 17 } }, // ග්‍රාම සංවර්ධන මට්ටම (Q1:R1)
-      { s: { r: 0, c: 18 }, e: { r: 0, c: 22 } }, // යටිතල පහසුකම් (S1:W1)
-      { s: { r: 0, c: 23 }, e: { r: 0, c: 26 } }  // වෙනත් තොරතුරු (X1:AA1)
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 5 } },   // පිහිටීම (A1:F1)
+      { s: { r: 0, c: 6 }, e: { r: 0, c: 8 } },   // මුදල් සම්ප්‍රාදන ක්‍රමය (G1:I1)
+      { s: { r: 0, c: 9 }, e: { r: 0, c: 13 } },  // ඉඩමේ හිමිකාරීත්වය (J1:N1)
+      { s: { r: 0, c: 14 }, e: { r: 0, c: 17 } }, // ගමේ පිහිටීමේ සීමාව (O1:R1)
+      // Col 18 (S) - single column, no merge
+      { s: { r: 0, c: 19 }, e: { r: 0, c: 23 } }, // යටිතල පහසුකම් (T1:X1)
+      { s: { r: 0, c: 24 }, e: { r: 0, c: 27 } }  // වෙනත් තොරතුරු (Y1:AB1)
     ];
 
     ws['!rows'] = [
@@ -110,13 +114,13 @@ const BulkVillageUpload = () => {
 
     // Style Groups with color-coded palettes
     const sections = [
-      { start: 0, end: 4, color: '4F46E5', subColor: 'EEF2F6', textDark: '1E293B', textLight: 'FFFFFF' }, // Indigo
-      { start: 5, end: 7, color: 'D97706', subColor: 'FEF3C7', textDark: '78350F', textLight: 'FFFFFF' }, // Amber
-      { start: 8, end: 12, color: '059669', subColor: 'D1FAE5', textDark: '064E3B', textLight: 'FFFFFF' }, // Emerald
-      { start: 13, end: 15, color: '0891B2', subColor: 'CFFAFE', textDark: '164E63', textLight: 'FFFFFF' }, // Cyan
-      { start: 16, end: 17, color: 'E11D48', subColor: 'FFE4E6', textDark: '881337', textLight: 'FFFFFF' }, // Rose
-      { start: 18, end: 22, color: '7C3AED', subColor: 'EDE9FE', textDark: '4C1D95', textLight: 'FFFFFF' }, // Violet
-      { start: 23, end: 26, color: '475569', subColor: 'F1F5F9', textDark: '0F172A', textLight: 'FFFFFF' }  // Slate
+      { start: 0, end: 5, color: '4F46E5', subColor: 'EEF2F6', textDark: '1E293B', textLight: 'FFFFFF' }, // Indigo - Location
+      { start: 6, end: 8, color: 'D97706', subColor: 'FEF3C7', textDark: '78350F', textLight: 'FFFFFF' }, // Amber - Funding
+      { start: 9, end: 13, color: '059669', subColor: 'D1FAE5', textDark: '064E3B', textLight: 'FFFFFF' }, // Emerald - Ownership
+      { start: 14, end: 17, color: '0891B2', subColor: 'CFFAFE', textDark: '164E63', textLight: 'FFFFFF' }, // Cyan - Boundary
+      { start: 18, end: 18, color: 'E11D48', subColor: 'FFE4E6', textDark: '881337', textLight: 'FFFFFF' }, // Rose - Status (single col)
+      { start: 19, end: 23, color: '7C3AED', subColor: 'EDE9FE', textDark: '4C1D95', textLight: 'FFFFFF' }, // Violet - Infrastructure
+      { start: 24, end: 27, color: '475569', subColor: 'F1F5F9', textDark: '0F172A', textLight: 'FFFFFF' }  // Slate - Others
     ];
 
     sections.forEach((sec) => {
@@ -172,6 +176,36 @@ const BulkVillageUpload = () => {
     });
     ws['!cols'] = colWidths;
 
+    // Dropdown data validation for Status column S (index 18) and Conservation Area column AA (index 26)
+    ws['!dataValidations'] = [
+      {
+        sqref: 'S3:S502',
+        type: 'list',
+        formula1: '"YES,NO"',
+        showDropDown: false,
+        showErrorMessage: true,
+        errorStyle: 'stop',
+        errorTitle: 'Invalid Value',
+        error: 'Please select YES or NO from the dropdown.',
+        showInputMessage: true,
+        promptTitle: 'ප්‍රවේශය',
+        prompt: 'Select YES for public access or NO for restricted access.'
+      },
+      {
+        sqref: 'AA3:AA502',
+        type: 'list',
+        formula1: '"සංරක්ෂිත භූමියක පිහිටා නැත,වන ජීවී භූමි තුල පිහිටයි,වන සංරක්ෂණ භූමි තුල පිහිටයි,වෙරල සංරක්ෂණ භූමි තුල පිහිටයි,පුරාවිද්‍යා භූමි තුල පිහිටයි,පූජා භූමි තුල පිහිටයි,වෙනත් සංරක්ෂණ භූමි තුල පිහිටයි"',
+        showDropDown: false,
+        showErrorMessage: true,
+        errorStyle: 'stop',
+        errorTitle: 'Invalid Value',
+        error: 'Please select a valid conservation area type from the dropdown.',
+        showInputMessage: true,
+        promptTitle: 'සංරක්ෂිත භූමි',
+        prompt: 'සංරක්ෂිත භූමි වර්ගය තෝරන්න.'
+      }
+    ];
+
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Village Template');
     XLSX.writeFile(wb, 'Village_Bulk_Registration_Template.xlsx');
@@ -217,42 +251,58 @@ const BulkVillageUpload = () => {
           // Index-based columns resolution (maps exactly to index 0 to 26):
           // 3.1 Category Code
           let categoryCode = '';
-          if (isTrueVal(row[5])) categoryCode = 'LOAN';
-          else if (isTrueVal(row[6])) categoryCode = 'GRANT_INDIAN';
-          else if (isTrueVal(row[7])) categoryCode = 'GRANT_HOUSING';
+          if (isTrueVal(row[6])) categoryCode = 'LOAN';
+          else if (isTrueVal(row[7])) categoryCode = 'GRANT_INDIAN';
+          else if (isTrueVal(row[8])) categoryCode = 'GRANT_HOUSING';
 
           // 3.2 Ownership Body Code
           let ownershipBodyCode = '';
-          if (isTrueVal(row[8])) ownershipBodyCode = 'DS_DIVISION';
-          else if (isTrueVal(row[9])) ownershipBodyCode = 'MAHAWELI';
-          else if (isTrueVal(row[10])) ownershipBodyCode = 'LRC';
-          else if (isTrueVal(row[11])) ownershipBodyCode = 'HOUSING_AUTH';
-          else if (isTrueVal(row[12])) ownershipBodyCode = 'WILDLIFE';
+          if (isTrueVal(row[9])) ownershipBodyCode = 'DS_DIVISION';
+          else if (isTrueVal(row[10])) ownershipBodyCode = 'MAHAWELI';
+          else if (isTrueVal(row[11])) ownershipBodyCode = 'LRC';
+          else if (isTrueVal(row[12])) ownershipBodyCode = 'HOUSING_AUTH';
+          else if (isTrueVal(row[13])) ownershipBodyCode = 'WILDLIFE';
 
           // 3.3 Boundary Type
           let boundaryType = '';
-          if (isTrueVal(row[13])) boundaryType = 'URBAN';
-          else if (isTrueVal(row[14])) boundaryType = 'DS';
-          else if (isTrueVal(row[15])) boundaryType = 'VILLAGE';
+          if (isTrueVal(row[14])) boundaryType = 'MUNICIPAL';
+          else if (isTrueVal(row[15])) boundaryType = 'URBAN';
+          else if (isTrueVal(row[16])) boundaryType = 'DS';
+          else if (isTrueVal(row[17])) boundaryType = 'VILLAGE';
 
-          // 3.4 Status
-          let status = 'CLOSED';
-          if (isTrueVal(row[16])) status = 'OPEN';
-          else if (isTrueVal(row[17])) status = 'CLOSED';
+          // 3.4 Status — single dropdown column, reads YES or NO directly
+          const rawStatus = row[18] ? String(row[18]).trim().toUpperCase() : '';
+          const status = (rawStatus === 'YES' || rawStatus === 'NO') ? rawStatus : '';
 
-          // 3.5 Conservation
-          const isConservationArea = isTrueVal(row[25]) ? 1 : 0;
+          // 3.5 Conservation (shifted)
+          const rawConservation = row[26] ? String(row[26]).trim().toUpperCase() : '';
+          let isConservationArea = 'NONE';
+          if (rawConservation.includes('වන ජීවී') || rawConservation === 'WILDLIFE') {
+            isConservationArea = 'WILDLIFE';
+          } else if (rawConservation.includes('වන සංරක්ෂණ') || rawConservation === 'FOREST') {
+            isConservationArea = 'FOREST';
+          } else if (rawConservation.includes('වෙරල') || rawConservation === 'COASTAL') {
+            isConservationArea = 'COASTAL';
+          } else if (rawConservation.includes('පුරාවිද්') || rawConservation.includes('පුරාවිද්‍යා') || rawConservation === 'ARCHAEOLOGICAL') {
+            isConservationArea = 'ARCHAEOLOGICAL';
+          } else if (rawConservation.includes('පූජා') || rawConservation === 'SACRED') {
+            isConservationArea = 'SACRED';
+          } else if (rawConservation.includes('වෙනත්') || rawConservation === 'OTHER') {
+            isConservationArea = 'OTHER';
+          } else if (rawConservation === 'YES' || rawConservation === 'TRUE' || rawConservation === 'ඔව්') {
+            isConservationArea = 'WILDLIFE';
+          }
 
-          // 3.6 Infrastructure Issues Array
+          // 3.6 Infrastructure Issues Array (shifted)
           const infrastructureIssues = [];
-          if (isTrueVal(row[18])) infrastructureIssues.push('WATER');
-          if (isTrueVal(row[19])) infrastructureIssues.push('ELECTRICITY');
-          if (isTrueVal(row[20])) infrastructureIssues.push('ACCESS_ROADS');
-          if (isTrueVal(row[21])) infrastructureIssues.push('INTERNAL_ROADS');
-          if (isTrueVal(row[22])) infrastructureIssues.push('OTHER');
+          if (isTrueVal(row[19])) infrastructureIssues.push('WATER');
+          if (isTrueVal(row[20])) infrastructureIssues.push('ELECTRICITY');
+          if (isTrueVal(row[21])) infrastructureIssues.push('ACCESS_ROADS');
+          if (isTrueVal(row[22])) infrastructureIssues.push('INTERNAL_ROADS');
+          if (isTrueVal(row[23])) infrastructureIssues.push('OTHER');
 
-          // 3.7 Program Start Date
-          let programStartDate = row[24] ? String(row[24]).trim() : '';
+          // 3.7 Program Start Date (shifted)
+          let programStartDate = row[25] ? String(row[25]).trim() : '';
           if (programStartDate && !isNaN(Number(programStartDate)) && Number(programStartDate) > 30000) {
             const dateObj = XLSX.SSF.parse_date_code(Number(programStartDate));
             if (dateObj) {
@@ -269,15 +319,16 @@ const BulkVillageUpload = () => {
             district_name: row[2] ? String(row[2]).trim() : '',
             division_name: row[3] ? String(row[3]).trim() : '',
             grama_niladhari_division: row[4] ? String(row[4]).trim() : '',
+            google_map_link: row[5] ? String(row[5]).trim() : '',
             category_code: categoryCode,
             ownership_body_code: ownershipBodyCode,
             boundary_type: boundaryType,
             status: status,
             is_conservation_area: isConservationArea,
             infrastructure_issues: infrastructureIssues,
-            total_planned_houses: row[23] !== '' && !isNaN(Number(row[23])) ? Number(row[23]) : null,
+            total_planned_houses: row[24] !== '' && !isNaN(Number(row[24])) ? Number(row[24]) : null,
             program_start_date: programStartDate,
-            notes: row[26] ? String(row[26]).trim() : ''
+            notes: row[27] ? String(row[27]).trim() : ''
           };
         }).filter(r => r !== null && r.name !== '');
 
@@ -313,7 +364,7 @@ const BulkVillageUpload = () => {
 
     const errorRows = [];
     
-    // Add Row 1 and Row 2 headers with the Error Column appended at index 27 (Column AB)
+    // Add Row 1 and Row 2 headers with the Error Column appended at index 28 (Column AC)
     const newHeaders1 = [...headers1, 'දෝෂ විස්තරය'];
     const newHeaders2 = [...headers2, 'දෝෂ විස්තරය (Error Message)'];
     
@@ -332,11 +383,11 @@ const BulkVillageUpload = () => {
           .join(' | ');
           
         const errorRow = [...row];
-        // Pad out array to ensure error message sits exactly at index 27 (Column AB)
-        while (errorRow.length < 27) {
+        // Pad out array to ensure error message sits exactly at index 28 (Column AC)
+        while (errorRow.length < 28) {
           errorRow.push('');
         }
-        errorRow[27] = errorMessages;
+        errorRow[28] = errorMessages;
         errorRows.push(errorRow);
       }
     });
@@ -344,15 +395,15 @@ const BulkVillageUpload = () => {
     // Generate sheet via xlsx-js-style
     const ws = XLSX.utils.aoa_to_sheet(errorRows);
 
-    // Set merges (merging sections A-AA in Row 1. Col AB remains standalone for Error)
+    // Set merges (Status col 18 is single - no merge. Error col AC at index 28 is standalone)
     ws['!merges'] = [
-      { s: { r: 0, c: 0 }, e: { r: 0, c: 4 } },   // පිහිටීම
-      { s: { r: 0, c: 5 }, e: { r: 0, c: 7 } },   // මුදල් සම්ප්‍රාදන ක්‍රමය
-      { s: { r: 0, c: 8 }, e: { r: 0, c: 12 } },  // ඉඩමේ හිමිකාරීත්වය
-      { s: { r: 0, c: 13 }, e: { r: 0, c: 15 } }, // ගමේ පිහිටීමේ සීමාව
-      { s: { r: 0, c: 16 }, e: { r: 0, c: 17 } }, // ග්‍රාම සංවර්ධන මට්ටම
-      { s: { r: 0, c: 18 }, e: { r: 0, c: 22 } }, // යටිතල පහසුකම්
-      { s: { r: 0, c: 23 }, e: { r: 0, c: 26 } }  // වෙනත් තොරතුරු
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 5 } },   // පිහිටීම
+      { s: { r: 0, c: 6 }, e: { r: 0, c: 8 } },   // මුදල් සම්ප්‍රාදන ක්‍රමය
+      { s: { r: 0, c: 9 }, e: { r: 0, c: 13 } },  // ඉඩමේ හිමිකාරීත්වය
+      { s: { r: 0, c: 14 }, e: { r: 0, c: 17 } }, // ගමේ පිහිටීමේ සීමාව
+      // Col 18 - single column, no merge
+      { s: { r: 0, c: 19 }, e: { r: 0, c: 23 } }, // යටිතල පහසුකම්
+      { s: { r: 0, c: 24 }, e: { r: 0, c: 27 } }  // වෙනත් තොරතුරු
     ];
 
     ws['!rows'] = [
@@ -362,15 +413,15 @@ const BulkVillageUpload = () => {
 
     // Style sections
     const sections = [
-      { start: 0, end: 4, color: '4F46E5', subColor: 'EEF2F6', textDark: '1E293B', textLight: 'FFFFFF' },
-      { start: 5, end: 7, color: 'D97706', subColor: 'FEF3C7', textDark: '78350F', textLight: 'FFFFFF' },
-      { start: 8, end: 12, color: '059669', subColor: 'D1FAE5', textDark: '064E3B', textLight: 'FFFFFF' },
-      { start: 13, end: 15, color: '0891B2', subColor: 'CFFAFE', textDark: '164E63', textLight: 'FFFFFF' },
-      { start: 16, end: 17, color: 'E11D48', subColor: 'FFE4E6', textDark: '881337', textLight: 'FFFFFF' },
-      { start: 18, end: 22, color: '7C3AED', subColor: 'EDE9FE', textDark: '4C1D95', textLight: 'FFFFFF' },
-      { start: 23, end: 26, color: '475569', subColor: 'F1F5F9', textDark: '0F172A', textLight: 'FFFFFF' },
-      // Standalone Error column (AB / index 27) themed in warning Red
-      { start: 27, end: 27, color: 'DC2626', subColor: 'FEE2E2', textDark: '991B1B', textLight: 'FFFFFF' }
+      { start: 0, end: 5, color: '4F46E5', subColor: 'EEF2F6', textDark: '1E293B', textLight: 'FFFFFF' },
+      { start: 6, end: 8, color: 'D97706', subColor: 'FEF3C7', textDark: '78350F', textLight: 'FFFFFF' },
+      { start: 9, end: 13, color: '059669', subColor: 'D1FAE5', textDark: '064E3B', textLight: 'FFFFFF' },
+      { start: 14, end: 17, color: '0891B2', subColor: 'CFFAFE', textDark: '164E63', textLight: 'FFFFFF' },
+      { start: 18, end: 18, color: 'E11D48', subColor: 'FFE4E6', textDark: '881337', textLight: 'FFFFFF' }, // Rose - Status single col
+      { start: 19, end: 23, color: '7C3AED', subColor: 'EDE9FE', textDark: '4C1D95', textLight: 'FFFFFF' },
+      { start: 24, end: 27, color: '475569', subColor: 'F1F5F9', textDark: '0F172A', textLight: 'FFFFFF' },
+      // Standalone Error column (AC / index 28)
+      { start: 28, end: 28, color: 'DC2626', subColor: 'FEE2E2', textDark: '991B1B', textLight: 'FFFFFF' }
     ];
 
     sections.forEach((sec) => {
@@ -413,7 +464,7 @@ const BulkVillageUpload = () => {
 
     // Style the actual written error cells in red
     for (let r = 2; r < errorRows.length; r++) {
-      const cellRef = `${getColLetter(27)}${r + 1}`; // AB is index 27
+      const cellRef = `${getColLetter(28)}${r + 1}`; // AC is index 28
       if (ws[cellRef]) {
         ws[cellRef].s = {
           font: { name: 'Calibri', sz: 9.5, color: { rgb: 'DC2626' }, bold: true },
@@ -426,7 +477,7 @@ const BulkVillageUpload = () => {
     const colWidths = newHeaders2.map((h2, i) => {
       const h1 = newHeaders1[i] || '';
       const maxLen = Math.max(h1.length, h2.length, 12);
-      if (i === 27) return { wch: 65 }; // Very wide error column
+      if (i === 28) return { wch: 65 }; // Very wide error column
       return { wch: Math.min(Math.max(maxLen + 4, 15), 45) };
     });
     ws['!cols'] = colWidths;
@@ -507,15 +558,7 @@ const BulkVillageUpload = () => {
         {/* Step 1 Card: Template Download */}
         <div className="lg:col-span-1 bg-white rounded-2xl border border-slate-200 p-6 shadow-sm flex flex-col justify-between">
           <div className="space-y-4">
-            <div className="w-12 h-12 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600">
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-              </svg>
-            </div>
-            <h3 className="text-lg font-bold text-slate-800">1. Excel Template එක බාගත කරන්න</h3>
-            <p className="text-sm text-slate-500 leading-relaxed">
-              තොග වශයෙන් ඇතුලත් කිරීමට පෙර අපගේ අලංකාරව සැකසූ ද්විත්ව පේළි Excel ආකෘතිය (Template) බාගත කරගන්න.
-            </p>
+            <h3 className="text-lg font-bold text-slate-800">1. Download Excel Template</h3>  
           </div>
           <button
             onClick={handleDownloadTemplate}
@@ -524,7 +567,7 @@ const BulkVillageUpload = () => {
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
-            Download Styled Template
+            Download Template
           </button>
         </div>
 
@@ -535,24 +578,21 @@ const BulkVillageUpload = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
               <div className="space-y-2 bg-slate-850 p-4 rounded-xl border border-slate-800/80">
                 <span className="font-semibold text-amber-400 flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> Location Headers (English Only)
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> Locations & Map Links
                 </span>
-                <p className="text-slate-400 leading-relaxed font-sinhala">
-                  පළාත (Province), දිස්ත්‍රික්කය (District), සහ ප්‍රාදේශීය ලේකම් (DS Division) අනිවාර්යයෙන් ඉංග්‍රීසි භාෂාවෙන් ඇතුලත් කරන්න. දිස්ත්‍රික්කය සහ DS කොට්ඨාශය අදාළ පළාතට අයත් විය යුතුය.
+                <p className="text-white leading-relaxed font-sinhala">
+                  පළාත, දිස්ත්‍රික්කය, ප්‍රා.ලේ. කොට්ඨාශය, ග්‍රා.නි. වසම අනිවාර්යයෙන් ඉංග්‍රීසි භාෂාවෙන් ඇතුලත් කරන්න. <br />Province, District, DS Division, GN Division must be entered in English.
                 </p>
               </div>
               <div className="space-y-2 bg-slate-850 p-4 rounded-xl border border-slate-800/80">
-                <span className="font-semibold text-indigo-400 flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" /> Dropdowns & Booleans (YES)
+                <span className="font-semibold text-amber-400 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> Multiple Option Selection (YES/ NO)
                 </span>
-                <p className="text-slate-400 leading-relaxed font-sinhala">
-                  ණය, ආධාර, ඉඩම් හිමිකාරීත්ව, යටිතල පහසුකම් වැනි Dropdowns වලදී අදාළ තීරුවලට <code className="bg-slate-800 px-1 py-0.5 rounded text-indigo-300 font-bold">YES</code> හෝ <code className="bg-slate-800 px-1 py-0.5 rounded text-indigo-300 font-bold">ඔව්</code> ඇතුලත් කරන්න.
+                <p className="text-white leading-relaxed font-sinhala">
+                  මුදල් සම්පාදන ක්‍රමය, ඉඩමේ හිමිකාරීත්වය, ගමේ පිහිටීමේ සීමාව, මහජනතාවට විවෘතද?, යටිතල පහසුකම් වැනි තේරීම් වලදී අදාළ තීරුවලට <code className="bg-slate-800 px-1 py-0.5 rounded text-indigo-300 font-bold">YES</code> හෝ <code className="bg-slate-800 px-1 py-0.5 rounded text-indigo-300 font-bold">NO</code> ලෙස ඇතුලත් කරන්න. <br /> Enter YES or NO for funding method, land ownership, village boundary, Is open to public?, infrastructure, etc.
                 </p>
               </div>
             </div>
-          </div>
-          <div className="text-[10px] text-slate-500 font-semibold mt-4">
-            * Note: ග්‍රාම සංවර්ධන ව්‍යාපෘතියේ නම (Development Project) තොග වශයෙන් ඇතුලත් කිරීමේදී අවශ්‍ය නොවේ.
           </div>
         </div>
       </div>
@@ -560,7 +600,7 @@ const BulkVillageUpload = () => {
       {/* Upload Drag & Drop Section */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="p-8 border-b border-slate-100 bg-slate-50/50">
-          <h2 className="text-xl font-bold text-slate-800">2. Excel ගොනුව ඇතුලත් කරන්න</h2>
+          <h2 className="text-xl font-bold text-slate-800">2. Upload Excel File</h2>
         </div>
 
         <div className="p-8">
