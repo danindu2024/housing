@@ -8,7 +8,6 @@ const SingleVillageForm = () => {
   // Form Inputs State
   const [formData, setFormData] = useState({
     name: '',
-    development_project_id: '',
     province: '',
     district_id: '',
     division_id: '',
@@ -17,19 +16,18 @@ const SingleVillageForm = () => {
     grama_niladhari_division: '',
     boundary_type: '',
     total_planned_houses: '',
-    status: 'IN_PROGRESS',
-    is_conservation_area: false,
+    status: '',
+    is_conservation_area: 'NONE',
     infrastructure_issues: [],
     program_start_date: '',
     notes: '',
+    google_map_link: '',
   });
 
   // Lookup data states
   const [categories, setCategories] = useState([]);
   const [ownershipBodies, setOwnershipBodies] = useState([]);
   const [districtsTree, setDistrictsTree] = useState([]);
-  
-  const [projects, setProjects] = useState([]);
   
   // Cascading lists states
   const [provinces, setProvinces] = useState([]);
@@ -47,22 +45,21 @@ const SingleVillageForm = () => {
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
+  const [scrollToggle, setScrollToggle] = useState(false);
 
   // 1. Load initial reference lookup lists
   useEffect(() => {
     const fetchReferences = async () => {
       try {
-        const [catRes, bodyRes, distRes, projRes] = await Promise.all([
+        const [catRes, bodyRes, distRes] = await Promise.all([
           api.get('/reference/village-categories'),
           api.get('/reference/land-ownership-bodies'),
           api.get('/reference/districts'),
-          api.get('/reference/development-projects'),
         ]);
 
         setCategories(catRes.data);
         setOwnershipBodies(bodyRes.data);
         setDistrictsTree(distRes.data);
-        setProjects(projRes.data);
 
         // Extract unique provinces
         const uniqueProvinces = [...new Set(distRes.data.map((d) => d.province))].sort();
@@ -262,10 +259,7 @@ const SingleVillageForm = () => {
       if (response.data.merged) {
         setSuccessMsg('Existing incomplete record updated and enriched successfully!');
       } else {
-        setSuccessMsg(statusOverride === 'INCOMPLETE' 
-          ? 'Village draft saved successfully!' 
-          : 'Village registered successfully!'
-        );
+        setSuccessMsg('Village registered successfully!');
       }
       
       // Redirect to village list after 1.5 seconds
@@ -282,10 +276,18 @@ const SingleVillageForm = () => {
       } else {
         setErrors({ global: err.response?.data?.error || 'Failed to register village record.' });
       }
+      setScrollToggle((prev) => !prev);
     } finally {
       setSubmitting(false);
     }
   };
+
+  // 8. Auto scroll to the top of the page on submit failure
+  useEffect(() => {
+    if (Object.keys(errors).length > 0) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [scrollToggle]);
 
   const handleNativeSubmit = (e) => {
     e.preventDefault();
@@ -323,17 +325,7 @@ const SingleVillageForm = () => {
               <p className="text-sm text-rose-700 mt-1">{errors.global}</p>
             ) : (
               <div className="mt-2 text-xs text-rose-750 space-y-1">
-                <p className="font-semibold">පහත දක්වා ඇති දත්ත නිවැරදි කර නැවත උත්සාහ කරන්න (Please correct the following errors):</p>
-                <ul className="list-disc list-inside space-y-0.5 mt-1 font-medium">
-                  {Object.keys(errors).map((field) => (
-                    <li key={field}>
-                      <span className="font-bold uppercase text-[10px] bg-rose-100/50 px-1 py-0.5 rounded mr-1">
-                        {field.replace('_', ' ')}
-                      </span>
-                      {errors[field][0]}
-                    </li>
-                  ))}
-                </ul>
+                <p className="font-semibold">පහත දක්වා ඇති දත්ත නිවැරදි කර නැවත උත්සාහ කරන්න (Please correct the following errors)</p>
               </div>
             )}
           </div>
@@ -343,8 +335,8 @@ const SingleVillageForm = () => {
       {/* Entry Form Card */}
       <form onSubmit={handleNativeSubmit} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="p-8 border-b border-slate-100 bg-slate-50/50">
-          <h2 className="text-xl font-bold text-slate-800">Register New Village Form</h2>
-          <p className="text-xs text-slate-400 mt-1">ඉහත දක්වා ඇති සියලුම තොරතුරු නිවැරදිව පුරවන්න.</p>
+          <h2 className="text-xl font-bold text-slate-800">New Village Registration Form</h2>
+          <p className="text-sm text-slate-600 mt-1">Fill below details correctly/ පහත දක්වා ඇති තොරතුරු නිවැරදිව පුරවන්න</p>
         </div>
 
         <div className="p-8 space-y-8">
@@ -353,7 +345,7 @@ const SingleVillageForm = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-bold uppercase tracking-wider text-slate-500 mb-2">
-                ගම්මානයේ නම
+                Village Name/ ගම්මානයේ නම
               </label>
               <input
                 type="text"
@@ -368,31 +360,11 @@ const SingleVillageForm = () => {
               {errors.name && <p className="text-xs text-rose-500 font-medium mt-1.5">{errors.name[0]}</p>}
             </div>
 
-            <div>
-              <label className="block text-sm font-bold uppercase tracking-wider text-slate-500 mb-2">
-                ග්‍රාම සංවර්ධන ව්‍යාපෘතියේ නම
-              </label>
-              <select
-                name="development_project_id"
-                value={formData.development_project_id}
-                onChange={handleInputChange}
-                className={`w-full px-4 py-3 rounded-xl border bg-slate-50/50 text-base focus:bg-white transition-all ${
-                  errors.development_project_id ? 'border-rose-300 focus:ring-rose-500 focus:border-rose-500' : 'border-slate-200 focus:ring-indigo-500 focus:border-indigo-500'
-                }`}
-              >
-                <option value="">-- ග්‍රාම සංවර්ධන ව්‍යාපෘති නාමය තෝරන්න --</option>
-                {projects.map((proj) => (
-                  <option key={proj.id} value={proj.id}>
-                    {proj.name_si}
-                  </option>
-                ))}
-              </select>
-              {errors.development_project_id && <p className="text-xs text-rose-500 font-medium mt-1.5">{errors.development_project_id[0]}</p>}
-            </div>
+
 
             <div>
               <label className="block text-sm font-bold uppercase tracking-wider text-slate-500 mb-2">
-                මුදල් සම්ප්‍රාදන ක්‍රමය
+                Funding Method/ මුදල් සම්පාදන ක්‍රමය
               </label>
               <select
                 name="category_id"
@@ -401,18 +373,27 @@ const SingleVillageForm = () => {
                 className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50/50 text-base focus:bg-white focus:ring-indigo-500 focus:border-indigo-500 transition-all"
               >
                 <option value="">-- ක්‍රමය තෝරන්න --</option>
-                {categories.map((cat) => (
-                  <option key={cat.id} value={cat.id}>
-                    {cat.name}
-                  </option>
-                ))}
+                {categories.map((cat) => {
+                  const englishNames = {
+                    LOAN: 'Loan Village',
+                    GRANT: 'Grant Village',
+                    GRANT_INDIAN: 'Indian Grant',
+                    GRANT_HOUSING: 'Housing Authority Grant'
+                  };
+                  const engName = englishNames[cat.code] || cat.code;
+                  return (
+                    <option key={cat.id} value={cat.id}>
+                      {cat.name} ({engName})
+                    </option>
+                  );
+                })}
               </select>
               {errors.category_id && <p className="text-xs text-rose-500 font-medium mt-1.5">{errors.category_id[0]}</p>}
             </div>
 
             <div>
               <label className="block text-sm font-bold uppercase tracking-wider text-slate-500 mb-2">
-                ඉඩමේ හිමිකාරීත්වය
+                Land Ownership/ ඉඩමේ හිමිකාරීත්වය
               </label>
               <select
                 name="ownership_body_id"
@@ -420,10 +401,10 @@ const SingleVillageForm = () => {
                 onChange={handleInputChange}
                 className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50/50 text-base focus:bg-white focus:ring-indigo-500 focus:border-indigo-500 transition-all"
               >
-                <option value="">-- නිවසේ හිමිකාරීත්වය තෝරන්න --</option>
+                <option value="">-- ඉඩමේ හිමිකාරීත්වය තෝරන්න --</option>
                 {ownershipBodies.map((body) => (
                   <option key={body.id} value={body.id}>
-                    {body.name_si}
+                    {body.name_si} ({body.name_en})
                   </option>
                 ))}
               </select>
@@ -439,7 +420,7 @@ const SingleVillageForm = () => {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div>
                 <label className="block text-sm font-bold uppercase tracking-wider text-slate-500 mb-2">
-                  පළාත
+                  Province/ පළාත
                 </label>
                 <select
                   name="province"
@@ -458,7 +439,7 @@ const SingleVillageForm = () => {
 
               <div>
                 <label className="block text-sm font-bold uppercase tracking-wider text-slate-500 mb-2">
-                  දිස්ත්‍රික්කය
+                  District/ දිස්ත්‍රික්කය
                 </label>
                 <select
                   name="district_id"
@@ -478,7 +459,7 @@ const SingleVillageForm = () => {
 
               <div>
                 <label className="block text-sm font-bold uppercase tracking-wider text-slate-500 mb-2">
-                  ප්‍රාදේශීය ලේකම් කොට්ඨාශය
+                  DS/ ප්‍රාදේශීය ලේකම් කොට්ඨාශය
                 </label>
                 <select
                   name="division_id"
@@ -500,13 +481,13 @@ const SingleVillageForm = () => {
               {/* GN Autocomplete field container */}
               <div className="md:col-span-3 relative" ref={gnRef}>
                 <label className="block text-sm font-bold uppercase tracking-wider text-slate-500 mb-2">
-                  ග්‍රාමනිළධාරී කොට්ඨාශය
+                  GN/ ග්‍රාමනිළධාරී කොට්ඨාශය
                 </label>
                 <div className="relative">
                   <input
                     type="text"
                     name="grama_niladhari_division"
-                    placeholder={fetchingGn ? "Loading locations database..." : "ග්‍රාමනිළධාරී කොට්ඨාශය ටයිප් කරන්න"}
+                    placeholder={fetchingGn ? "Loading locations database..." : "කොට්ඨාශය ඉංග්‍රීසි භාෂාවෙන් ටයිප් කරන්න (type GN division)"}
                     value={formData.grama_niladhari_division}
                     onChange={handleGnSearch}
                     onFocus={() => setGnSearchFocus(true)}
@@ -543,16 +524,19 @@ const SingleVillageForm = () => {
               {/* Village Boundary */}
               <div>
                 <label className="block text-sm font-bold uppercase tracking-wider text-slate-500 mb-2">
-                  ගමේ පිහිටීමේ සීමාව
+                  Village Boundary/ ගමේ පිහිටීමේ සීමාව
                 </label>
                 <select
                   name="boundary_type"
                   value={formData.boundary_type}
                   onChange={handleInputChange}
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50/50 text-base focus:bg-white focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+                  className={`w-full px-4 py-3 rounded-xl border bg-slate-50/50 text-base focus:bg-white transition-all ${
+                    errors.boundary_type ? 'border-rose-300 focus:ring-rose-500 focus:border-rose-500' : 'border-slate-200 focus:ring-indigo-500 focus:border-indigo-500'
+                  }`}
                 >
                   <option value="">-- සීමාව තෝරන්න --</option>
-                  <option value="URBAN">මහනගර සභාව (Urban)</option>
+                  <option value="MUNICIPAL">මහනගර සභාව (Municipal)</option>
+                  <option value="URBAN">නගරසභාව (Urban)</option>
                   <option value="DS">ප්‍රාදේශීය සභාව (DS)</option>
                   <option value="VILLAGE">දුෂ්කර ගම්මාන (Village)</option>
                 </select>
@@ -561,7 +545,7 @@ const SingleVillageForm = () => {
 
               <div className="md:col-span-2">
                 <label className="block text-sm font-bold uppercase tracking-wider text-slate-500 mb-2">
-                  ඉදිකිරීමට සැළසුම්කල නිවාස සංඛ්‍යාව
+                  Planned Houses/ ඉදිකිරීමට සැළසුම්කල නිවාස සංඛ්‍යාව
                 </label>
                 <input
                   type="number"
@@ -576,7 +560,7 @@ const SingleVillageForm = () => {
 
               <div>
                 <label className="block text-sm font-bold uppercase tracking-wider text-slate-500 mb-2">
-                  මුල්ගල් තැබු දිනය
+                  Foundation Day/ මුල්ගල් තැබු දිනය
                 </label>
                 <input
                   type="date"
@@ -586,6 +570,23 @@ const SingleVillageForm = () => {
                   className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50/50 text-base focus:bg-white transition-all"
                 />
                 {errors.program_start_date && <p className="text-xs text-rose-500 font-medium mt-1.5">{errors.program_start_date[0]}</p>}
+              </div>
+
+              <div className="md:col-span-3">
+                <label className="block text-sm font-bold uppercase tracking-wider text-slate-500 mb-2">
+                  Google Map Link
+                </label>
+                <input
+                  type="url"
+                  name="google_map_link"
+                  placeholder="https://maps.google.com/..."
+                  value={formData.google_map_link}
+                  onChange={handleInputChange}
+                  className={`w-full px-4 py-3 rounded-xl border bg-slate-50/50 text-base focus:bg-white transition-all ${
+                    errors.google_map_link ? 'border-rose-300' : 'border-slate-200'
+                  }`}
+                />
+                {errors.google_map_link && <p className="text-xs text-rose-500 font-medium mt-1.5">{errors.google_map_link[0]}</p>}
               </div>
             </div>
           </div>
@@ -598,41 +599,42 @@ const SingleVillageForm = () => {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div>
                 <label className="block text-sm font-bold uppercase tracking-wider text-slate-500 mb-2">
-                  ග්‍රාම සංවර්ධන මට්ටම (Status)
+                  Is open to public/ මහජනතාවට විවෘතද?
                 </label>
                 <select
                   name="status"
                   value={formData.status}
                   onChange={handleInputChange}
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50/50 text-base focus:bg-white transition-all font-semibold"
+                  className={`w-full px-4 py-3 rounded-xl border bg-slate-50/50 text-base focus:bg-white transition-all ${
+                    errors.status ? 'border-rose-300 focus:ring-rose-500 focus:border-rose-500' : 'border-slate-200 focus:ring-indigo-500 focus:border-indigo-500'
+                  }`}
                 >
-                  <option value="IN_PROGRESS">ප්‍රගතියේ පවතී (Active / In Progress)</option>
-                  <option value="COMPLETED">සම්පූර්ණයි (Completed)</option>
-                  <option value="INCOMPLETE">අසම්පූර්ණයි / කටු සටහන (Draft / Incomplete)</option>
-                  <option value="ABANDONED">අත්හැර දමන ලදී (Abandoned)</option>
+                  <option value="">-- තෝරන්න --</option>
+                  <option value="CLOSED">විවෘත නොවේ (No)</option>
+                  <option value="OPEN">විවෘතයි (Yes)</option>
                 </select>
                 {errors.status && <p className="text-xs text-rose-500 font-medium mt-1.5">{errors.status[0]}</p>}
               </div>
 
               <div className="w-full md:col-span-3">
                   <label className="block text-sm font-bold uppercase tracking-wider text-slate-500 mb-3">
-                    යටිතල පහසුකම්
+                    Infrastructure/ යටිතල පහසුකම්
                   </label>
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 bg-white p-4 rounded-xl border border-slate-200">
                     {[
-                      { value: 'WATER', label: 'ජලය' },
-                      { value: 'ELECTRICITY', label: 'විදුලිය' },
-                      { value: 'ACCESS_ROADS', label: 'ගමට ප්‍රවේශ මාර්ග' },
-                      { value: 'INTERNAL_ROADS', label: 'අභ්‍යන්තර මාර්ග' },
-                      { value: 'OTHER', label: 'වෙනත් පොදු පහසුකම්' }
+                      { value: 'WATER', label: 'ජලය (water)' },
+                      { value: 'ELECTRICITY', label: 'විදුලිය (electricity)' },
+                      { value: 'ACCESS_ROADS', label: 'ගමට ප්‍රවේශ මාර්ග (access roads to the village)' },
+                      { value: 'INTERNAL_ROADS', label: 'අභ්‍යන්තර මාර්ග (internal roads)' },
+                      { value: 'OTHER', label: 'වෙනත් පොදු පහසුකම් (other)' }
                     ].map((opt) => (
-                      <label key={opt.value} className="flex items-center gap-3 cursor-pointer select-none">
+                      <label key={opt.value} className="flex items-start gap-3 cursor-pointer select-none">
                         <input
                           type="checkbox"
                           value={opt.value}
                           checked={formData.infrastructure_issues?.includes(opt.value) || false}
                           onChange={handleInfraCheckboxChange}
-                          className="w-5 h-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 transition-all"
+                          className="w-5 h-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 transition-all mt-0.5"
                         />
                         <span className="text-base font-semibold text-slate-700">{opt.label}</span>
                       </label>
@@ -642,24 +644,32 @@ const SingleVillageForm = () => {
                 </div>
 
               {/* Environmental flags */}
-              <div className="md:col-span-3 flex flex-col sm:flex-row gap-8 bg-slate-50 p-6 rounded-2xl border border-slate-100">
-                <label className="flex items-center gap-3 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    name="is_conservation_area"
-                    checked={formData.is_conservation_area}
-                    onChange={handleInputChange}
-                    className="w-5 h-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                  />
-                  <div>
-                    <span className="text-base font-semibold text-slate-800">ගම වනජීවී/සං‍රක්ෂණ බලසීමා තුල පිහිටයි</span>
-                  </div>
+              <div className="md:col-span-3">
+                <label className="block text-sm font-bold uppercase tracking-wider text-slate-500 mb-2">
+                  Located in Conservation Area? /සංරක්ෂිත භූමි තුල පිහිටීම?
                 </label>
+                <select
+                  name="is_conservation_area"
+                  value={formData.is_conservation_area}
+                  onChange={handleInputChange}
+                  className={`w-full px-4 py-3 rounded-xl border bg-slate-50/50 text-base focus:bg-white transition-all ${
+                    errors.is_conservation_area ? 'border-rose-300 focus:ring-rose-500 focus:border-rose-500' : 'border-slate-200 focus:ring-indigo-500 focus:border-indigo-500'
+                  }`}
+                >
+                  <option value="NONE">සංරක්ෂිත භූමියක පිහිටා නැත (Not in conservation area)</option>
+                  <option value="WILDLIFE">වන ජීවී භූමි තුල පිහිටයි (Wildlife Land)</option>
+                  <option value="FOREST">වන සංරක්ෂණ භූමි තුල පිහිටයි (Forest Conservation Land)</option>
+                  <option value="COASTAL">වෙරල සංරක්ෂණ භූමි තුල පිහිටයි (Coastal Conservation Land)</option>
+                  <option value="ARCHAEOLOGICAL">පුරාවිද්‍යා භූමි තුල පිහිටයි (Archaeological Land)</option>
+                  <option value="SACRED">පූජා භූමි තුල පිහිටයි (Sacred Land)</option>
+                  <option value="OTHER">වෙනත් සංරක්ෂණ භූමි තුල පිහිටයි (Other Conservation Land)</option>
+                </select>
+                {errors.is_conservation_area && <p className="text-xs text-rose-500 font-medium mt-1.5">{errors.is_conservation_area[0]}</p>}
               </div>
 
               <div className="md:col-span-3">
                 <label className="block text-sm font-bold uppercase tracking-wider text-slate-500 mb-2">
-                  වෙනත් තොරතුරු
+                  Other Details/ වෙනත් තොරතුරු
                 </label>
                 <textarea
                   name="notes"
@@ -686,15 +696,7 @@ const SingleVillageForm = () => {
           <button
             type="button"
             disabled={submitting}
-            onClick={() => handleSubmitWithStatus('INCOMPLETE')}
-            className="px-6 py-3 rounded-xl border border-amber-200 text-amber-700 bg-amber-50/40 hover:bg-amber-50 font-bold text-sm transition-all disabled:opacity-50"
-          >
-            Save Draft (Incomplete)
-          </button>
-          <button
-            type="button"
-            disabled={submitting}
-            onClick={() => handleSubmitWithStatus(formData.status === 'INCOMPLETE' ? 'IN_PROGRESS' : formData.status)}
+            onClick={() => handleSubmitWithStatus(formData.status)}
             className="px-8 py-3 rounded-xl bg-indigo-600 text-sm font-bold text-white hover:bg-indigo-500 shadow-md shadow-indigo-500/10 disabled:opacity-50 transition-all flex items-center gap-2"
           >
             {submitting ? (
@@ -703,7 +705,7 @@ const SingleVillageForm = () => {
                 <span>Saving Details...</span>
               </>
             ) : (
-              'Save & Initialize'
+              'Save Details'
             )}
           </button>
         </div>
