@@ -1,0 +1,14 @@
+USE housing;
+
+SET FOREIGN_KEY_CHECKS = 0;
+
+TRUNCATE TABLE issue_report;
+TRUNCATE TABLE loan_default_reason;
+TRUNCATE TABLE loan_payment;
+TRUNCATE TABLE loan;
+TRUNCATE TABLE grant_detail;
+TRUNCATE TABLE house;
+TRUNCATE TABLE village;
+TRUNCATE TABLE officer;
+
+SET FOREIGN_KEY_CHECKS = 1;
