@@ -1,4 +1,4 @@
-USE housing;
+-- USE housing;
 
 -- Rename 'name' to 'name_en' for consistency
 ALTER TABLE land_ownership_body CHANGE name name_en VARCHAR(150) NOT NULL;

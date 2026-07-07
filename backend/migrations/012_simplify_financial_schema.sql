@@ -1,4 +1,4 @@
-USE housing;
+-- USE housing;
 
 -- Simplify loan table
 ALTER TABLE loan 

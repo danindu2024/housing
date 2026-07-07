@@ -1,4 +1,4 @@
-USE housing;
+-- USE housing;
 
 CREATE TABLE IF NOT EXISTS district (
   id INT PRIMARY KEY AUTO_INCREMENT,

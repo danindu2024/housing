@@ -1,3 +1,3 @@
-USE housing;
+-- USE housing;
 
 ALTER TABLE village ADD COLUMN google_map_link VARCHAR(512) NULL DEFAULT NULL;

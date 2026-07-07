@@ -1,4 +1,4 @@
-USE housing;
+-- USE housing;
 
 ALTER TABLE village MODIFY COLUMN is_conservation_area VARCHAR(50) NOT NULL DEFAULT 'NONE';
 UPDATE village SET is_conservation_area = 'WILDLIFE' WHERE is_conservation_area = '1';
