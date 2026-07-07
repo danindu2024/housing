@@ -1,4 +1,4 @@
-USE housing;
+-- USE housing;
 
 SET FOREIGN_KEY_CHECKS = 0;
 

@@ -1,4 +1,4 @@
-USE housing;
+-- USE housing;
 
 -- Delete previously inserted district and admin accounts to avoid duplicates
 DELETE FROM inspector WHERE email LIKE '%@nhd.lk';

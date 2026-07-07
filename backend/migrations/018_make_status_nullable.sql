@@ -1,3 +1,3 @@
-USE housing;
+-- USE housing;
 
 ALTER TABLE village MODIFY COLUMN status ENUM('OPEN', 'CLOSED') NULL DEFAULT NULL;

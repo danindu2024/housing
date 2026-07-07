@@ -1,4 +1,4 @@
-USE housing;
+-- USE housing;
 
 -- 1. Create the lookup table for development projects
 CREATE TABLE IF NOT EXISTS development_project (
