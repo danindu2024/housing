@@ -36,6 +36,15 @@ class SystemController {
             if ((int)$checkCount === 0) {
                 $tableCheck = $db->query("SHOW TABLES LIKE 'district'")->fetch();
                 if ($tableCheck) {
+                    // Check if google_map_link column exists to see if migrations 14-18 were already applied
+                    $hasGoogleMapLink = false;
+                    try {
+                        $colCheck = $db->query("SHOW COLUMNS FROM village LIKE 'google_map_link'")->fetch();
+                        if ($colCheck) {
+                            $hasGoogleMapLink = true;
+                        }
+                    } catch (\Exception $e) {}
+
                     $historical = [
                         '001_initial_schema.sql',
                         '002_development_project.sql',
@@ -49,18 +58,46 @@ class SystemController {
                         '010_add_boundary_type.sql',
                         '011_create_grant_table.sql',
                         '012_simplify_financial_schema.sql',
-                        '013_create_officer_table.sql',
-                        '014_add_google_map_link.sql',
-                        '015_make_ownership_body_id_nullable.sql',
-                        '016_update_boundary_type_enum.sql',
-                        '017_update_conservation_area_enum.sql',
-                        '018_make_status_nullable.sql'
+                        '013_create_officer_table.sql'
                     ];
+
+                    if ($hasGoogleMapLink) {
+                        $historical = array_merge($historical, [
+                            '014_add_google_map_link.sql',
+                            '015_make_ownership_body_id_nullable.sql',
+                            '016_update_boundary_type_enum.sql',
+                            '017_update_conservation_area_enum.sql',
+                            '018_make_status_nullable.sql'
+                        ]);
+                    }
+
                     $ins = $db->prepare("INSERT INTO migration_history (migration_name) VALUES (:name)");
                     foreach ($historical as $m) {
                         $ins->execute([':name' => $m]);
                     }
                 }
+            }
+
+            // Self-healing check: If migration_history claims 014 is executed, but google_map_link is missing from village table,
+            // we delete 014-018 from migration_history so they get executed properly.
+            $hasGoogleMapLinkColumn = false;
+            try {
+                $colCheck = $db->query("SHOW COLUMNS FROM village LIKE 'google_map_link'")->fetch();
+                if ($colCheck) {
+                    $hasGoogleMapLinkColumn = true;
+                }
+            } catch (\Exception $e) {
+                // Table might not exist yet, which is fine
+            }
+
+            if (!$hasGoogleMapLinkColumn) {
+                $db->exec("DELETE FROM migration_history WHERE migration_name IN (
+                    '014_add_google_map_link.sql',
+                    '015_make_ownership_body_id_nullable.sql',
+                    '016_update_boundary_type_enum.sql',
+                    '017_update_conservation_area_enum.sql',
+                    '018_make_status_nullable.sql'
+                )");
             }
 
             // 2. Fetch already executed migrations
