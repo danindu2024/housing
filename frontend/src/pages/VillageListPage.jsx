@@ -240,15 +240,17 @@ const VillageListPage = () => {
                     <td className="px-6 py-5.5">
                       <div className="space-y-1">
                         <span className="text-sm font-bold text-slate-700">
-                          {v.category.code === 'LOAN' ? 'ණය' : v.category.code === 'GRANT' ? 'ආධාර' : v.category.name}
+                          {v.category?.code === 'LOAN' ? 'ණය' : v.category?.code === 'GRANT' ? 'ආධාර' : v.category?.name}
                         </span>
-                        <p className="text-xs text-slate-400 font-semibold">Owner: {v.ownership_body.name_si}</p>
+                        {v.ownership_body && (
+                          <p className="text-xs text-slate-400 font-semibold">Owner: {v.ownership_body.name_si}</p>
+                        )}
                       </div>
                     </td>
                     <td className="px-6 py-5.5">
                       <div className="space-y-1">
-                        <span className="text-sm font-bold text-slate-700">{v.division.name}</span>
-                        <p className="text-xs text-slate-400 font-semibold">{v.division.district} District</p>
+                        <span className="text-sm font-bold text-slate-700">{v.division?.name}</span>
+                        <p className="text-xs text-slate-400 font-semibold">{v.division?.district} District</p>
                       </div>
                     </td>
                     <td className="px-6 py-5.5">
