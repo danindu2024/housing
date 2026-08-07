@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import logo from '../../assets/nhd-logo.png';
 
 const Sidebar = ({ isOpen, setIsSidebarOpen }) => {
   const { logout, user } = useAuth();
@@ -82,12 +83,14 @@ const Sidebar = ({ isOpen, setIsSidebarOpen }) => {
         {/* Brand Logo Header */}
         <div className="p-6 border-b border-slate-800 flex items-center justify-between bg-slate-950">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center font-bold text-white shadow-md shadow-indigo-500/20">
-              V
-            </div>
+            <img
+              src={logo}
+              alt="NHD Logo"
+              className="w-10 h-10 object-contain"
+            />
             <div>
               <h1 className="font-bold text-sm tracking-wide uppercase text-indigo-400">Housing Portal</h1>
-              <p className="text-[10px] text-slate-500 font-medium">Investigation System</p>
+              <p className="text-[10px] text-slate-500 font-medium">Data Collection System</p>
             </div>
           </div>
           {/* Mobile Close Button */}
