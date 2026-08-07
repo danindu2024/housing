@@ -113,7 +113,9 @@ const Sidebar = ({ isOpen, setIsSidebarOpen }) => {
             </div>
             <div className="min-w-0">
               <h2 className="text-xs font-semibold text-slate-200 truncate">{user.full_name}</h2>
-              <p className="text-[10px] text-indigo-400 font-medium capitalize mt-0.5">{user.role.toLowerCase()}</p>
+              <p className="text-[10px] text-indigo-400 font-medium tracking-wide uppercase mt-0.5">
+                {user.role === 'ADMIN' ? 'Head Office' : user.role === 'INVESTIGATOR' ? 'District Office' : user.role}
+              </p>
             </div>
           </div>
         )}
