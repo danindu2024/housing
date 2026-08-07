@@ -109,6 +109,63 @@ const VillageDetailPage = () => {
     return <span className={`text-xs ${badges[status] || ''}`}>{labels[status] || status}</span>;
   };
 
+  const getCategoryDisplay = (code, nameSi) => {
+    const englishNames = {
+      LOAN: 'Loan Village',
+      GRANT: 'Grant Village',
+      GRANT_INDIAN: 'Indian Grant',
+      GRANT_HOUSING: 'Housing Authority Grant',
+    };
+    const engName = englishNames[code];
+    if (nameSi && engName) {
+      return `${nameSi} / ${engName}`;
+    }
+    if (code === 'LOAN') return 'ණය / Loan Village';
+    if (code === 'GRANT') return 'ආධාර / Grant Village';
+    return nameSi || engName || code || '';
+  };
+
+  const getOwnershipBodyDisplay = () => {
+    if (!village) return null;
+    const si = village.ownership_body_name_si;
+    const en = village.ownership_body_name_en;
+    if (si && en) {
+      return `${si} / ${en}`;
+    }
+    return si || en || null;
+  };
+
+  const getBoundaryTypeDisplay = (boundary) => {
+    const boundaries = {
+      MUNICIPAL: 'මහනගර සභා (Municipal Council)',
+      URBAN: 'නගර සභා (Urban Council)',
+      PRADESHIYA_SABHA: 'ප්‍රාදේශීය සභා (Pradeshiya Sabha)',
+    };
+    return boundaries[boundary] || boundary || 'සටහන් කර නැත (Not Specified)';
+  };
+
+  const getInfrastructureBadges = (infraArray) => {
+    if (!infraArray || !Array.isArray(infraArray) || infraArray.length === 0) {
+      return <span className="text-xs font-bold text-slate-800">පහසුකම් සටහන් කර නැත / No facilities recorded</span>;
+    }
+    const infraMap = {
+      WATER: { label: 'ජලය (Water)'},
+      ELECTRICITY: { label: 'විදුලිය (Electricity)'},
+      ACCESS_ROADS: { label: 'ගමට ප්‍රවේශ මාර්ග (Access Roads)'},
+      INTERNAL_ROADS: { label: 'අභ්‍යන්තර මාර්ග (Internal Roads)'},
+      OTHER: { label: 'වෙනත් පොදු පහසුකම් (Other)'},
+    };
+    return infraArray.map((item) => {
+      const info = infraMap[item] || { label: item, icon: '✨' };
+      return (
+        <span key={item} className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-extrabold bg-white text-slate-700 border border-slate-200 shadow-sm">
+          <span>{info.icon}</span>
+          <span>{info.label}</span>
+        </span>
+      );
+    });
+  };
+
   if (loading) {
     return (
       <div className="p-20 flex flex-col items-center justify-center bg-white rounded-2xl border border-slate-200">
@@ -147,26 +204,33 @@ const VillageDetailPage = () => {
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="p-8 bg-slate-900 text-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-6 relative">
           <div className="space-y-2 relative z-10">
-            <div className="flex items-center gap-2">
-              <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
-                isLoanVillage ? 'bg-indigo-500 text-white shadow-sm' : 'bg-amber-500 text-white shadow-sm'
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`px-2.5 py-1 rounded-lg text-xs font-extrabold uppercase tracking-wider ${
+                village.category_code === 'LOAN'
+                  ? 'bg-sky-500 text-white shadow-sm'
+                  : village.category_code === 'GRANT'
+                  ? 'bg-emerald-500 text-white shadow-sm'
+                  : 'bg-amber-500 text-white shadow-sm'
               }`}>
-                {village.category_code === 'LOAN' ? 'ණය' : village.category_code === 'GRANT' ? 'ආධාර' : village.category_name}
+                {getCategoryDisplay(village.category_code, village.category_name)}
               </span>
-              {village.development_project_name_si && (
-                <span className="px-2 py-0.5 rounded bg-slate-700 text-slate-100 text-[10px] font-black uppercase tracking-wider shadow-sm">
-                  {village.development_project_name_si}
-                </span>
-              )}
-              <span className="text-[10px] font-semibold text-slate-400">Owner: {village.ownership_body_name_si}</span>
             </div>
             <h1 className="text-2xl font-black tracking-tight">{village.name}</h1>
-            <p className="text-xs text-slate-400 font-medium">
-              Administrative Location: {village.division_name} Division, {village.district_name} District &bull; GN: {village.grama_niladhari_division}
+            <p className="text-xs text-slate-300 font-medium">
+              Location: {village.district_name} District, {village.division_name}, {village.grama_niladhari_division}
             </p>
           </div>
 
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 relative z-10 w-full sm:w-auto">
+            <button
+              onClick={() => navigate(`/villages/${id}/edit`)}
+              className="w-full sm:w-auto border border-indigo-400/40 hover:border-indigo-400 text-indigo-200 hover:text-white font-bold text-xs uppercase tracking-wider px-6 py-3.5 rounded-xl bg-indigo-950/60 hover:bg-indigo-600 transition-all flex items-center justify-center gap-2 active:scale-95 shadow-sm"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+              Edit Village Details
+            </button>
             <button
               onClick={() => {
                 setDeleteError('');
@@ -197,7 +261,6 @@ const VillageDetailPage = () => {
         {/* Environmental Area Alert */}
         {village.is_conservation_area && village.is_conservation_area !== 'NONE' && (
           <div className="px-8 py-4 bg-rose-500/10 border-b border-rose-100 text-rose-800 text-xs font-semibold flex items-center gap-2.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse flex-shrink-0" />
             <span>සංරක්ෂිත භූමි සීමාව: <span className="font-extrabold">{
               village.is_conservation_area === 'WILDLIFE' ? 'වන ජීවී භූමි තුල පිහිටයි (Wildlife Land)' :
               village.is_conservation_area === 'FOREST' ? 'වන සංරක්ෂණ භූමි තුල පිහිටයි (Forest Conservation Land)' :
@@ -205,22 +268,99 @@ const VillageDetailPage = () => {
               village.is_conservation_area === 'ARCHAEOLOGICAL' ? 'පුරාවිද්‍යා භූමි තුල පිහිටයි (Archaeological Land)' :
               village.is_conservation_area === 'SACRED' ? 'පූජා භූමි තුල පිහිටයි (Sacred Land)' :
               village.is_conservation_area === 'OTHER' ? 'වෙනත් සංරක්ෂණ භූමි තුල පිහිටයි (Other Conservation Land)' : village.is_conservation_area
-            }</span>. මෙම සීමාවන් තුල ඉඩම් පැවරීම/විකිණීම සපුරා තහනම් වේ. (WARNING: Located inside a Conservation Zone. Land sales here are strictly illegal.)</span>
+            }</span></span>
           </div>
         )}
 
-        {/* Notes & dates */}
-        <div className="p-8 grid grid-cols-1 md:grid-cols-3 gap-6 bg-slate-50/50">
-          <div className="md:col-span-2 space-y-1">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Field Survey Notes</span>
-            <p className="text-xs text-slate-600 font-medium leading-relaxed">{village.notes || 'No detailed field notes are recorded for this village.'}</p>
+        {/* Specifications Grid */}
+        <div className="p-8 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6 border-b border-slate-100 bg-white">
+          {/* 1. Land Ownership */}
+          <div className="space-y-1">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-600 block">
+              ඉඩමේ හිමිකාරීත්වය / Land Ownership
+            </span>
+            <p className="text-xs font-bold text-slate-800">
+              {getOwnershipBodyDisplay() || 'සටහන් කර නැත (Not Specified)'}
+            </p>
           </div>
-          <div className="space-y-1 border-t md:border-t-0 md:border-l border-slate-200 pt-4 md:pt-0 md:pl-6">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Investigative Schedule</span>
-            <div className="text-xs text-slate-600 font-semibold space-y-1 mt-1">
-              <p>Commenced: {village.program_start_date || 'Unknown'}</p>
 
+          {/* 2. Village Boundary */}
+          <div className="space-y-1">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-600 block">
+              ගමේ පිහිටීමේ සීමාව / Boundary Type
+            </span>
+            <p className="text-xs font-bold text-slate-800">
+              {getBoundaryTypeDisplay(village.boundary_type)}
+            </p>
+          </div>
+
+          {/* 3. Foundation Day */}
+          <div className="space-y-1">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-600 block">
+              මුල්ගල තැබූ දිනය / Foundation Date
+            </span>
+            <p className="text-xs font-bold text-slate-800">
+              {village.program_start_date || 'සටහන් කර නැත (N/A)'}
+            </p>
+          </div>
+
+          {/* 4. Public Status */}
+          <div className="space-y-1">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-600 block">
+              මහජනතාවට විවෘතද? / Public Status
+            </span>
+            <div>
+              {village.status === 'OPEN' ? (
+                <p className="text-xs font-bold text-slate-800">
+                  විවෘතයි (Open)
+                </p>
+              ) : (
+                <p className="text-xs font-bold text-slate-800">
+                  විවෘත කර නැත (Closed)
+                </p>
+              )}
             </div>
+          </div>
+
+          {/* 5. Google Map Link */}
+          <div className="space-y-1">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-600 block">
+              Google Map Location
+            </span>
+            {village.google_map_link ? (
+              <a
+                href={village.google_map_link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors"
+              >
+                <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                Open Google Map ↗
+              </a>
+            ) : (
+              <p className="text-xs font-bold text-slate-800">No Google Map Link</p>
+            )}
+          </div>
+        </div>
+
+        {/* Infrastructure Details Bar */}
+        <div className="p-8 border-b border-slate-100 bg-slate-50/70 space-y-2">
+          <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-600 block">
+            යටිතල පහසුකම් / Infrastructure
+          </span>
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            {getInfrastructureBadges(village.infrastructure_issues)}
+          </div>
+        </div>
+
+        {/* Notes */}
+        <div className="p-8 bg-white">
+          <div className="space-y-1">
+            <span className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">Other Details/ වෙනත් තොරතුරු</span>
+            <p className="text-xs font-bold text-slate-800">{village.notes || 'No other details'}</p>
           </div>
         </div>
       </div>
@@ -412,7 +552,7 @@ const VillageDetailPage = () => {
               </div>
               <div>
                 <h3 className="font-extrabold text-slate-800 text-lg">
-                  {village.summary.total_houses > 0 ? 'Cannot Delete Village' : 'Delete Village?'}
+                  {village.summary.total_houses > 0 ? 'Cannot Delete Village' : 'Delete Village'}
                 </h3>
                 <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider mt-0.5">
                   {village.summary.total_houses > 0 ? 'Action Restricted' : 'Warning Confirm'}
@@ -464,7 +604,7 @@ const VillageDetailPage = () => {
                   onClick={() => setShowDeleteModal(false)}
                   className="w-full sm:w-auto px-6 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl uppercase tracking-wider transition-colors"
                 >
-                  Close / හරි
+                  Close
                 </button>
               ) : (
                 <>
@@ -474,7 +614,7 @@ const VillageDetailPage = () => {
                     disabled={deleting}
                     className="flex-1 sm:flex-initial px-5 py-2.5 border border-slate-200 text-slate-600 bg-white hover:bg-slate-50 font-bold text-xs rounded-xl uppercase tracking-wider transition-colors"
                   >
-                    Cancel / අවලංගු කරන්න
+                    Cancel
                   </button>
                   <button
                     type="button"
@@ -492,7 +632,7 @@ const VillageDetailPage = () => {
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                         </svg>
-                        Delete / මකන්න
+                        Delete
                       </>
                     )}
                   </button>
