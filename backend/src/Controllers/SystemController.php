@@ -24,6 +24,13 @@ class SystemController {
         try {
             $db = Database::getConnection();
 
+            // Check if specific migration file should be force re-executed
+            $forceFile = $_GET['force_file'] ?? $_GET['rerun'] ?? null;
+            if (!empty($forceFile)) {
+                $delStmt = $db->prepare("DELETE FROM migration_history WHERE migration_name LIKE :name");
+                $delStmt->execute([':name' => '%' . trim($forceFile) . '%']);
+            }
+
             // 1. Create migration tracker table if it doesn't exist
             $db->exec("CREATE TABLE IF NOT EXISTS migration_history (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -116,8 +123,32 @@ class SystemController {
             // Sort files numerically/alphabetically
             sort($migrationFiles);
 
+            $skipParam = $_GET['skip'] ?? '';
+            $skipPatterns = array_filter(array_map('trim', explode(',', $skipParam)));
+
             $executed = [];
             foreach ($migrationFiles as $file) {
+                // Safety protection: Never automatically run TRUNCATE data scripts on live database
+                if (strpos($file, 'truncate') !== false) {
+                    $recordStmt = $db->prepare("INSERT IGNORE INTO migration_history (migration_name) VALUES (:name)");
+                    $recordStmt->execute([':name' => $file]);
+                    continue;
+                }
+
+                // Skip specified migrations
+                $isSkipped = false;
+                foreach ($skipPatterns as $pattern) {
+                    if (!empty($pattern) && strpos($file, $pattern) !== false) {
+                        $isSkipped = true;
+                        break;
+                    }
+                }
+                if ($isSkipped) {
+                    $recordStmt = $db->prepare("INSERT IGNORE INTO migration_history (migration_name) VALUES (:name)");
+                    $recordStmt->execute([':name' => $file]);
+                    continue;
+                }
+
                 if (in_array($file, $executedMigrations)) {
                     continue; // Skip already executed migrations
                 }
@@ -129,7 +160,7 @@ class SystemController {
                 $db->exec($sql);
 
                 // Record execution in history table
-                $recordStmt = $db->prepare("INSERT INTO migration_history (migration_name) VALUES (:name)");
+                $recordStmt = $db->prepare("INSERT IGNORE INTO migration_history (migration_name) VALUES (:name)");
                 $recordStmt->execute([':name' => $file]);
 
                 $executed[] = $file;

@@ -9,15 +9,37 @@ const VillageListPage = () => {
   const [error, setError] = useState('');
 
   // Filtering states
-  const [category, setCategory] = useState('');
-  const [status, setStatus] = useState('');
-  const [isConservation, setIsConservation] = useState('');
-  const [infraIssue, setInfraIssue] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [province, setProvince] = useState('');
+  const [districtId, setDistrictId] = useState('');
+  const [divisionId, setDivisionId] = useState('');
+  const [gnDivision, setGnDivision] = useState('');
+
+  // Lookup reference & cascading dropdown lists
+  const [districtsTree, setDistrictsTree] = useState([]);
+  const [provinces, setProvinces] = useState([]);
+  const [districts, setDistricts] = useState([]);
+  const [divisions, setDivisions] = useState([]);
 
   // Pagination states
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalRecords, setTotalRecords] = useState(0);
+
+  // Load districts tree reference data on mount
+  useEffect(() => {
+    const fetchReferences = async () => {
+      try {
+        const res = await api.get('/reference/districts');
+        setDistrictsTree(res.data);
+        const uniqueProvinces = [...new Set(res.data.map((d) => d.province))].sort();
+        setProvinces(uniqueProvinces);
+      } catch (err) {
+        console.error('Failed to load district lookup references:', err);
+      }
+    };
+    fetchReferences();
+  }, []);
 
   const fetchVillages = async () => {
     setLoading(true);
@@ -28,10 +50,11 @@ const VillageListPage = () => {
         per_page: 10,
       };
 
-      if (category) params.category = category;
-      if (status) params.status = status;
-      if (isConservation) params.is_conservation_area = isConservation;
-      if (infraIssue) params.infrastructure_issue = infraIssue;
+      if (searchTerm.trim()) params.search = searchTerm.trim();
+      if (province) params.province = province;
+      if (districtId) params.district_id = districtId;
+      if (divisionId) params.division_id = divisionId;
+      if (gnDivision.trim()) params.grama_niladhari_division = gnDivision.trim();
 
       const response = await api.get('/villages', { params });
       setVillages(response.data.data);
@@ -47,14 +70,104 @@ const VillageListPage = () => {
 
   useEffect(() => {
     fetchVillages();
-  }, [page, category, status, isConservation, infraIssue]);
+  }, [page, searchTerm, province, districtId, divisionId, gnDivision]);
+
+  // Cascading Location Handlers
+  const handleProvinceChange = (e) => {
+    const selectedProv = e.target.value;
+    setProvince(selectedProv);
+    setDistrictId('');
+    setDivisionId('');
+    setGnDivision('');
+    setPage(1);
+
+    if (selectedProv) {
+      const filtered = districtsTree.filter((d) => d.province === selectedProv);
+      setDistricts(filtered);
+    } else {
+      setDistricts([]);
+    }
+    setDivisions([]);
+  };
+
+  const handleDistrictChange = (e) => {
+    const selectedDistId = e.target.value;
+    setDistrictId(selectedDistId);
+    setDivisionId('');
+    setGnDivision('');
+    setPage(1);
+
+    if (selectedDistId) {
+      const matchedDistrict = districtsTree.find((d) => d.id === parseInt(selectedDistId));
+      setDivisions(matchedDistrict?.divisions || []);
+    } else {
+      setDivisions([]);
+    }
+  };
+
+  const handleDivisionChange = (e) => {
+    setDivisionId(e.target.value);
+    setGnDivision('');
+    setPage(1);
+  };
+
+  const handleGnChange = (e) => {
+    setGnDivision(e.target.value);
+    setPage(1);
+  };
+
+  const getCategoryDisplay = (v) => {
+    const code = v.category_code || v.category?.code;
+    const nameSi = v.category_name || v.category?.name || '';
+    const englishNames = {
+      LOAN: 'Loan Village',
+      GRANT: 'Grant Village',
+      GRANT_INDIAN: 'Indian Grant',
+      GRANT_HOUSING: 'Housing Authority Grant',
+    };
+
+    const categoryStyles = {
+      LOAN: {
+        bg: 'bg-sky-50/90 border-sky-200/80',
+        textSi: 'text-sky-800',
+        textEn: 'text-sky-600',
+      },
+      GRANT: {
+        bg: 'bg-emerald-50/90 border-emerald-200/80',
+        textSi: 'text-emerald-800',
+        textEn: 'text-emerald-600',
+      },
+      GRANT_INDIAN: {
+        bg: 'bg-amber-50/90 border-amber-200/80',
+        textSi: 'text-amber-900',
+        textEn: 'text-amber-700',
+      },
+      GRANT_HOUSING: {
+        bg: 'bg-purple-50/90 border-purple-200/80',
+        textSi: 'text-purple-900',
+        textEn: 'text-purple-700',
+      },
+    };
+
+    const style = categoryStyles[code] || {
+      bg: 'bg-indigo-50/90 border-indigo-200/80',
+      textSi: 'text-indigo-800',
+      textEn: 'text-indigo-600',
+    };
+
+    const nameEn = englishNames[code] || '';
+    return { nameSi, nameEn, style };
+  };
 
   // Handle filter resets
   const resetFilters = () => {
-    setCategory('');
-    setStatus('');
-    setIsConservation('');
-    setInfraIssue('');
+    setSearchTerm('');
+    setProvince('');
+    setDistrictId('');
+    setDivisionId('');
+    setGnDivision('');
+    setDistricts([]);
+    setDivisions([]);
     setPage(1);
   };
 
@@ -77,14 +190,19 @@ const VillageListPage = () => {
   return (
     <div className="space-y-6">
       {/* Title Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
         <div>
           <h1 className="text-2xl font-bold text-slate-800 tracking-tight">Villages Directory</h1>
-          <p className="text-slate-500 text-xs mt-1">Total {totalRecords} development sites initialized across the country.</p>
+          <div className="flex flex-wrap items-center gap-2 mt-2">
+            <span className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-black bg-indigo-50 text-indigo-700 border border-indigo-200/80 shadow-sm">
+              <span className="w-2 h-2 rounded-full bg-indigo-600 animate-pulse" />
+              Total {totalRecords} Villages Registered So Far
+            </span>
+          </div>
         </div>
         <button
           onClick={() => navigate('/villages/new')}
-          className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm px-6 py-3 rounded-xl shadow-md shadow-indigo-600/10 hover:shadow-indigo-500/20 transition-all flex items-center justify-center gap-2"
+          className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm px-6 py-3 rounded-xl shadow-md shadow-indigo-600/10 hover:shadow-indigo-500/20 transition-all flex items-center justify-center gap-2 self-start sm:self-auto"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
@@ -94,79 +212,116 @@ const VillageListPage = () => {
       </div>
 
       {/* Filter Options Panel */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-4 flex items-center gap-2">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-4">
+        {/* Search Bar */}
+        <div className="relative">
+          <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
+          <input
+            type="text"
+            placeholder="ගම්මානයේ නම අනුව සොයන්න / Search by Village Name"
+            value={searchTerm}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setPage(1);
+            }}
+            className="w-full pl-11 pr-10 py-3 rounded-xl border border-slate-300 bg-slate-50/80 text-sm font-semibold text-slate-800 placeholder-slate-500 placeholder:font-semibold focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-sm"
+          />
+          {searchTerm && (
+            <button
+              onClick={() => {
+                setSearchTerm('');
+                setPage(1);
+              }}
+              className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
+              aria-label="Clear search"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
+
+        <h3 className="text-sm font-bold tracking-wider text-slate-600 flex items-center gap-2 pt-2">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
           </svg>
-          Filter Investigations
+          පිහිටීම අනුව සොයන්න / Filter by Location
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+          {/* Province */}
           <div>
             <select
-              value={category}
-              onChange={(e) => { setCategory(e.target.value); setPage(1); }}
+              value={province}
+              onChange={handleProvinceChange}
               className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-medium text-slate-700 bg-slate-50 focus:bg-white focus:ring-indigo-500 focus:border-indigo-500 transition-all"
             >
-              <option value="">සියලුම ක්‍රමවේද</option>
-              <option value="LOAN">ණය</option>
-              <option value="GRANT">ආධාර</option>
+              <option value="">සියලුම පළාත් (All Provinces)</option>
+              {provinces.map((prov) => (
+                <option key={prov} value={prov}>
+                  {prov}
+                </option>
+              ))}
             </select>
           </div>
 
+          {/* District */}
           <div>
             <select
-              value={status}
-              onChange={(e) => { setStatus(e.target.value); setPage(1); }}
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-medium text-slate-700 bg-slate-50 focus:bg-white focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+              value={districtId}
+              disabled={!province}
+              onChange={handleDistrictChange}
+              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-medium text-slate-700 bg-slate-50 focus:bg-white focus:ring-indigo-500 focus:border-indigo-500 disabled:opacity-50 transition-all"
             >
-              <option value="">සියලුම ග්‍රාම සංවර්ධන මට්ටම්</option>
-              <option value="OPEN">මහජනතාව සඳහා විවෘතයි</option>
-              <option value="CLOSED">විවෘත කර නැත</option>
+              <option value="">සියලුම දිස්ත්‍රික්ක (All Districts)</option>
+              {districts.map((dist) => (
+                <option key={dist.id} value={dist.id}>
+                  {dist.name}
+                </option>
+              ))}
             </select>
           </div>
 
+          {/* DS Division */}
           <div>
             <select
-              value={isConservation}
-              onChange={(e) => { setIsConservation(e.target.value); setPage(1); }}
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-medium text-slate-700 bg-slate-50 focus:bg-white focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+              value={divisionId}
+              disabled={!districtId}
+              onChange={handleDivisionChange}
+              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-medium text-slate-700 bg-slate-50 focus:bg-white focus:ring-indigo-500 focus:border-indigo-500 disabled:opacity-50 transition-all"
             >
-              <option value="">සියලුම පරිසර කලාප (All Env Zones)</option>
-              <option value="1">සංරක්ෂිත කලාප තුල (Inside Conservation)</option>
-              <option value="0">සංරක්ෂිත නොවන (Outside Conservation)</option>
-              <option value="WILDLIFE">වන ජීවී (Wildlife)</option>
-              <option value="FOREST">වන සංරක්ෂණ (Forest)</option>
-              <option value="COASTAL">වෙරල සංරක්ෂණ (Coastal)</option>
-              <option value="ARCHAEOLOGICAL">පුරාවිද්‍යා (Archaeological)</option>
-              <option value="SACRED">පූජා භූමි (Sacred Land)</option>
-              <option value="OTHER">වෙනත් සංරක්ෂණ (Other)</option>
+              <option value="">සියලුම ප්‍රාදේශීය ලේකම් (All DS)</option>
+              {divisions.map((div) => (
+                <option key={div.id} value={div.id}>
+                  {div.name}
+                </option>
+              ))}
             </select>
           </div>
 
+          {/* GN Division */}
           <div>
-            <select
-              value={infraIssue}
-              onChange={(e) => { setInfraIssue(e.target.value); setPage(1); }}
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-medium text-slate-700 bg-slate-50 focus:bg-white focus:ring-indigo-500 focus:border-indigo-500 transition-all"
-            >
-              <option value="">සියලුම යටිතල පහසුකම් ගැටළු</option>
-              <option value="WATER">ජලය</option>
-              <option value="ELECTRICITY">විදුලිය</option>
-              <option value="ACCESS_ROADS">ගමට ප්‍රවේශ මාර්ග</option>
-              <option value="INTERNAL_ROADS">අභ්‍යන්තර මාර්ග</option>
-              <option value="OTHER">වෙනත් පොදු පහසුකම්</option>
-            </select>
+            <input
+              type="text"
+              placeholder="ග්‍රාමනිළධාරී කොට්ඨාශය (GN Division)"
+              value={gnDivision}
+              onChange={handleGnChange}
+              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-medium text-slate-700 bg-slate-50 placeholder-slate-400 focus:bg-white focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+            />
           </div>
         </div>
 
-        {(category || status || isConservation !== '' || infraIssue !== '') && (
+        {(searchTerm || province || districtId || divisionId || gnDivision) && (
           <div className="mt-4 pt-4 border-t border-slate-100 flex justify-end">
             <button
               onClick={resetFilters}
               className="text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors uppercase tracking-wider"
             >
-              Clear Filter Tags
+              Clear Location Filters
             </button>
           </div>
         )}
@@ -184,23 +339,18 @@ const VillageListPage = () => {
         </div>
       ) : villages.length === 0 ? (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-16 text-center">
-          <svg className="w-12 h-12 text-slate-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
           <h3 className="font-bold text-slate-800 text-base">No Villages Found</h3>
-          <p className="text-slate-500 text-xs mt-1">Try modifying your filters or initialize a new development site.</p>
+          <p className="text-slate-500 text-xs mt-1">No Village Registered Under the Selected Filters</p>
         </div>
       ) : (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-slate-50/50 border-b border-slate-200 text-xs font-bold text-slate-400 uppercase tracking-wider">
+                <tr className="bg-slate-50/50 border-b border-slate-200 text-xs font-bold text-slate-600 uppercase tracking-wider">
                   <th className="px-6 py-4.5">Village Info</th>
-                  <th className="px-6 py-4.5">Structure</th>
-                  <th className="px-6 py-4.5">Regional Division</th>
-                  <th className="px-6 py-4.5 text-center">Recorded Houses Progress</th>
-                  <th className="px-6 py-4.5">Status</th>
+                  <th className="px-6 py-4.5">Location Info</th>
+                  <th className="px-6 py-4.5 text-center">Houses Register Progress</th>
                   <th className="px-6 py-4.5 text-right">Actions</th>
                 </tr>
               </thead>
@@ -215,42 +365,34 @@ const VillageListPage = () => {
                         >
                           {v.name}
                         </span>
-                        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                          {v.development_project && (
-                            <span className="text-xs bg-indigo-50/70 text-indigo-700 border border-indigo-100/60 px-2.5 py-0.5 rounded-lg font-bold uppercase tracking-wide">
-                              {v.development_project.name_si}
-                            </span>
-                          )}
-                          <span className="text-xs bg-slate-100/80 text-slate-650 px-2.5 py-0.5 rounded-lg border border-slate-200/50 font-medium">
-                            GN: {v.grama_niladhari_division}
-                          </span>
-                          {v.is_conservation_area && v.is_conservation_area !== 'NONE' && (
-                            <span className="text-xs bg-rose-50/70 text-rose-600 border border-rose-100/60 px-2.5 py-0.5 rounded-lg font-bold flex items-center gap-1 shadow-sm">
-                              <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
-                              {v.is_conservation_area === 'WILDLIFE' ? 'වන ජීවී' :
-                               v.is_conservation_area === 'FOREST' ? 'වන සංරක්ෂණ' :
-                               v.is_conservation_area === 'COASTAL' ? 'වෙරල සංරක්ෂණ' :
-                               v.is_conservation_area === 'ARCHAEOLOGICAL' ? 'පුරාවිද්‍යා' :
-                               v.is_conservation_area === 'SACRED' ? 'පූජා භූමි' : 'සංරක්ෂිත කලාපය'}
-                            </span>
-                          )}
+                        <div className="mt-1">
+                          {(() => {
+                            const { nameSi, nameEn, style } = getCategoryDisplay(v);
+                            return (
+                              <div className={`inline-flex flex-col border px-2.5 py-1 rounded-lg ${style.bg}`}>
+                                <span className={`text-xs font-extrabold leading-tight ${style.textSi}`}>{nameSi}</span>
+                                {nameEn && (
+                                  <span className={`text-[10px] font-bold leading-tight mt-0.5 ${style.textEn}`}>{nameEn}</span>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </div>
                       </div>
                     </td>
                     <td className="px-6 py-5.5">
                       <div className="space-y-1">
-                        <span className="text-sm font-bold text-slate-700">
-                          {v.category?.code === 'LOAN' ? 'ණය' : v.category?.code === 'GRANT' ? 'ආධාර' : v.category?.name}
+                        <span className="text-sm font-extrabold text-slate-800 block">
+                          {v.district_name || v.division?.district}
                         </span>
-                        {v.ownership_body && (
-                          <p className="text-xs text-slate-400 font-semibold">Owner: {v.ownership_body.name_si}</p>
+                        <p className="text-xs text-slate-600 font-bold">
+                          DS: {v.division_name || v.division?.name}
+                        </p>
+                        {v.grama_niladhari_division && (
+                          <p className="text-xs text-slate-500 font-medium">
+                            GN: {v.grama_niladhari_division}
+                          </p>
                         )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-5.5">
-                      <div className="space-y-1">
-                        <span className="text-sm font-bold text-slate-700">{v.division?.name}</span>
-                        <p className="text-xs text-slate-400 font-semibold">{v.division?.district} District</p>
                       </div>
                     </td>
                     <td className="px-6 py-5.5">
@@ -269,13 +411,12 @@ const VillageListPage = () => {
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-5.5">{getStatusBadge(v.status)}</td>
                     <td className="px-6 py-5.5 text-right">
                       <button
                         onClick={() => navigate(`/villages/${v.id}`)}
                         className="inline-flex items-center gap-1.5 px-4 py-2 border border-slate-200 hover:border-indigo-200 text-xs font-bold text-indigo-650 hover:text-white bg-slate-50/50 hover:bg-indigo-600 rounded-xl transition-all shadow-sm active:scale-95"
                       >
-                        <span>Inspect Site</span>
+                        <span>View Village</span>
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7" />
                         </svg>

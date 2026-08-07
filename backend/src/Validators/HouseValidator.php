@@ -6,10 +6,8 @@ class HouseValidator {
     public static function validate(array $data): array {
         $errors = [];
 
-        // House Number
-        if (empty($data['house_number']) || trim($data['house_number']) === '') {
-            $errors['house_number'][] = 'The house number field is required.';
-        } elseif (strlen($data['house_number']) > 50) {
+        // House Number (Optional)
+        if (!empty($data['house_number']) && strlen($data['house_number']) > 50) {
             $errors['house_number'][] = 'The house number cannot exceed 50 characters.';
         }
 
@@ -20,10 +18,15 @@ class HouseValidator {
             $errors['owner_name'][] = 'The owner name must be between 3 and 200 characters.';
         }
 
-        // Sri Lankan NIC Format Validation (9 digits + V/X, or 12 digits)
-        if (empty($data['owner_nic']) || trim($data['owner_nic']) === '') {
-            $errors['owner_nic'][] = 'The National Identity Card (NIC) number is required.';
-        } else {
+        // Beneficiary Number (Mandatory)
+        if (empty($data['beneficiary_number']) || trim($data['beneficiary_number']) === '') {
+            $errors['beneficiary_number'][] = 'The beneficiary number field is required.';
+        } elseif (strlen($data['beneficiary_number']) > 100) {
+            $errors['beneficiary_number'][] = 'The beneficiary number cannot exceed 100 characters.';
+        }
+
+        // Sri Lankan NIC Format Validation (9 digits + V/X, or 12 digits) - Optional
+        if (!empty($data['owner_nic']) && trim($data['owner_nic']) !== '') {
             $nic = trim($data['owner_nic']);
             if (!preg_match('/^(?:\d{9}[vVxX]|\d{12})$/', $nic)) {
                 $errors['owner_nic'][] = 'Invalid Sri Lankan NIC format (e.g. 198801234567 or 881234567V).';
@@ -44,15 +47,43 @@ class HouseValidator {
             }
         }
 
-        // Construction Stage
-        if (!isset($data['construction_stage_id']) || !is_numeric($data['construction_stage_id']) || (int)$data['construction_stage_id'] <= 0) {
-            $errors['construction_stage_id'][] = 'A valid construction progress stage is required.';
+        // Construction Stage (Optional)
+        if (isset($data['construction_stage_id']) && $data['construction_stage_id'] !== '' && $data['construction_stage_id'] !== null) {
+            if (!is_numeric($data['construction_stage_id']) || (int)$data['construction_stage_id'] <= 0) {
+                $errors['construction_stage_id'][] = 'A valid construction progress stage is required.';
+            }
         }
 
         // Occupancy Status Enum Checks
         $validOccupancy = ['BORROWER_LIVING', 'SOLD', 'ABANDONED', 'NOT_APPLICABLE'];
         if (empty($data['occupancy_status']) || !in_array($data['occupancy_status'], $validOccupancy)) {
             $errors['occupancy_status'][] = 'Occupancy status must be one of: ' . implode(', ', $validOccupancy);
+        }
+
+        // Financial Fields Validation (Loan & Grant)
+        if (isset($data['loan_amount']) && $data['loan_amount'] !== '' && $data['loan_amount'] !== null) {
+            if (!is_numeric($data['loan_amount']) || (float)$data['loan_amount'] < 0) {
+                $errors['loan_amount'][] = 'Total loan amount must be a positive number.';
+            }
+        }
+
+        if (isset($data['total_paid_so_far']) && $data['total_paid_so_far'] !== '' && $data['total_paid_so_far'] !== null) {
+            if (!is_numeric($data['total_paid_so_far']) || (float)$data['total_paid_so_far'] < 0) {
+                $errors['total_paid_so_far'][] = 'Total paid so far must be a positive number.';
+            }
+        }
+
+        if (!empty($data['repayment_status'])) {
+            $validRepayment = ['NOT_PAID', 'PARTIALLY_PAID', 'PAYING', 'FULLY_PAID', 'DEFAULTED'];
+            if (!in_array($data['repayment_status'], $validRepayment)) {
+                $errors['repayment_status'][] = 'Invalid repayment status value.';
+            }
+        }
+
+        if (isset($data['grant_amount']) && $data['grant_amount'] !== '' && $data['grant_amount'] !== null) {
+            if (!is_numeric($data['grant_amount']) || (float)$data['grant_amount'] < 0) {
+                $errors['grant_amount'][] = 'Total grant amount must be a positive number.';
+            }
         }
 
         return $errors;
