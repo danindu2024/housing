@@ -26,6 +26,7 @@ $router->get('/api/v1/villages', [VillageController::class, 'index'], [AuthMiddl
 $router->post('/api/v1/villages', [VillageController::class, 'store'], [AuthMiddleware::class]);
 $router->post('/api/v1/villages/bulk', [VillageController::class, 'bulkStore'], [AuthMiddleware::class]);
 $router->get('/api/v1/villages/{id}', [VillageController::class, 'show'], [AuthMiddleware::class]);
+$router->put('/api/v1/villages/{id}', [VillageController::class, 'update'], [AuthMiddleware::class]);
 $router->delete('/api/v1/villages/{id}', [VillageController::class, 'destroy'], [AuthMiddleware::class]);
 
 // --- Houses Management (Protected) ---
