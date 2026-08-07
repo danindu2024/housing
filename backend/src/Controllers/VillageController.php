@@ -678,6 +678,102 @@ class VillageController {
         }
     }
 
+    public function update(array $params): void {
+        $id = (int)$params['id'];
+        $body = json_decode(file_get_contents('php://input'), true);
+
+        if (!$body) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Malformed or missing JSON request body.']);
+            return;
+        }
+
+        $body = $this->sanitizeInput($body);
+
+        $errors = VillageValidator::validate($body);
+        if (!empty($errors)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Validation failed', 'details' => $errors]);
+            return;
+        }
+
+        try {
+            $db = Database::getConnection();
+
+            // Verify village exists
+            $checkStmt = $db->prepare("SELECT id FROM village WHERE id = :id");
+            $checkStmt->execute([':id' => $id]);
+            if (!$checkStmt->fetch()) {
+                http_response_code(404);
+                echo json_encode(['error' => 'Village record not found.']);
+                return;
+            }
+
+            $divisionId = !empty($body['division_id']) ? (int)$body['division_id'] : null;
+            if (!$divisionId) {
+                $divStmt = $db->query("SELECT id FROM division LIMIT 1");
+                $divisionId = (int)$divStmt->fetchColumn() ?: 1;
+            }
+
+            $name = !empty($body['name']) ? trim($body['name']) : 'Draft Village';
+
+            $stmt = $db->prepare("
+                UPDATE village SET
+                  division_id = :division_id,
+                  category_id = :category_id,
+                  ownership_body_id = :ownership_body_id,
+                  name = :name,
+                  development_project_id = :project_id,
+                  grama_niladhari_division = :gn_div,
+                  total_planned_houses = :total_planned,
+                  status = :status,
+                  is_conservation_area = :conservation,
+                  infrastructure_issues = :infra_issues,
+                  boundary_type = :boundary_type,
+                  program_start_date = :start_date,
+                  notes = :notes,
+                  google_map_link = :google_map_link
+                WHERE id = :id
+            ");
+
+            $categoryId = !empty($body['category_id']) ? (int)$body['category_id'] : null;
+            if (!$categoryId) {
+                $catStmt = $db->query("SELECT id FROM village_category LIMIT 1");
+                $categoryId = (int)$catStmt->fetchColumn() ?: 1;
+            }
+
+            $ownershipBodyId = !empty($body['ownership_body_id']) ? (int)$body['ownership_body_id'] : null;
+
+            $stmt->execute([
+                'id'             => $id,
+                'division_id'    => $divisionId,
+                'category_id'    => $categoryId,
+                'ownership_body_id' => $ownershipBodyId,
+                'name'           => $name,
+                'project_id'     => !empty($body['development_project_id']) ? (int)$body['development_project_id'] : null,
+                'gn_div'         => !empty($body['grama_niladhari_division']) ? trim($body['grama_niladhari_division']) : null,
+                'total_planned'  => isset($body['total_planned_houses']) && $body['total_planned_houses'] !== '' ? (int)$body['total_planned_houses'] : 0,
+                'status'         => !empty($body['status']) ? (in_array(strtoupper(trim($body['status'])), ['YES', 'OPEN']) ? 'OPEN' : 'CLOSED') : null,
+                'conservation'   => !empty($body['is_conservation_area']) ? $body['is_conservation_area'] : 'NONE',
+                'infra_issues'   => (isset($body['infrastructure_issues']) && is_array($body['infrastructure_issues'])) ? json_encode($body['infrastructure_issues']) : null,
+                'boundary_type'  => !empty($body['boundary_type']) ? $body['boundary_type'] : null,
+                'start_date'     => !empty($body['program_start_date']) ? $body['program_start_date'] : null,
+                'notes'          => !empty($body['notes']) ? trim($body['notes']) : null,
+                'google_map_link'=> !empty($body['google_map_link']) ? trim($body['google_map_link']) : null,
+            ]);
+
+            http_response_code(200);
+            echo json_encode([
+                'id' => $id,
+                'message' => 'Village record updated successfully.'
+            ]);
+
+        } catch (\PDOException $e) {
+            http_response_code(500);
+            echo json_encode(['error' => 'Failed to update village record: ' . $e->getMessage()]);
+        }
+    }
+
     public function destroy(array $params): void {
         $id = (int)$params['id'];
 
