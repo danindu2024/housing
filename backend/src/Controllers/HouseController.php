@@ -38,7 +38,7 @@ class HouseController {
                 $bindings['is_land_sold'] = (int)$filters['is_land_sold'];
             }
 
-            $sql .= " ORDER BY h.house_number";
+            $sql .= " ORDER BY COALESCE(h.house_number, h.beneficiary_number, h.id)";
             $stmt = $db->prepare($sql);
             $stmt->execute($bindings);
             $houses = $stmt->fetchAll();
@@ -160,52 +160,59 @@ class HouseController {
         try {
             $db = Database::getConnection();
 
-            // Check if house number is unique inside this village
-            $dupHouseStmt = $db->prepare("SELECT COUNT(*) FROM house WHERE village_id = :village_id AND house_number = :house_number");
-            $dupHouseStmt->execute([
-                ':village_id' => $villageId,
-                ':house_number' => trim($body['house_number'])
-            ]);
-            if ((int)$dupHouseStmt->fetchColumn() > 0) {
-                http_response_code(400);
-                echo json_encode([
-                    'error' => 'Validation failed',
-                    'details' => ['house_number' => ['This house number is already registered within this village.']]
+            // Check if house number is unique inside this village (only if provided)
+            $houseNum = !empty($body['house_number']) ? trim($body['house_number']) : null;
+            if ($houseNum !== null) {
+                $dupHouseStmt = $db->prepare("SELECT COUNT(*) FROM house WHERE village_id = :village_id AND house_number = :house_number");
+                $dupHouseStmt->execute([
+                    ':village_id' => $villageId,
+                    ':house_number' => $houseNum
                 ]);
-                return;
+                if ((int)$dupHouseStmt->fetchColumn() > 0) {
+                    http_response_code(400);
+                    echo json_encode([
+                        'error' => 'Validation failed',
+                        'details' => ['house_number' => ['This house number is already registered within this village.']]
+                    ]);
+                    return;
+                }
             }
 
-            // Check if NIC is unique globally
-            $dupNicStmt = $db->prepare("SELECT COUNT(*) FROM house WHERE owner_nic = :owner_nic");
-            $dupNicStmt->execute([':owner_nic' => trim($body['owner_nic'])]);
-            if ((int)$dupNicStmt->fetchColumn() > 0) {
-                http_response_code(400);
-                echo json_encode([
-                    'error' => 'Validation failed',
-                    'details' => ['owner_nic' => ['National Identity Card (NIC) number is already registered to another house.']]
-                ]);
-                return;
+            // Check if NIC is unique globally (only if provided)
+            $ownerNic = !empty($body['owner_nic']) ? trim($body['owner_nic']) : null;
+            if ($ownerNic !== null) {
+                $dupNicStmt = $db->prepare("SELECT COUNT(*) FROM house WHERE owner_nic = :owner_nic");
+                $dupNicStmt->execute([':owner_nic' => $ownerNic]);
+                if ((int)$dupNicStmt->fetchColumn() > 0) {
+                    http_response_code(400);
+                    echo json_encode([
+                        'error' => 'Validation failed',
+                        'details' => ['owner_nic' => ['National Identity Card (NIC) number is already registered to another house.']]
+                    ]);
+                    return;
+                }
             }
 
             // Insert house record
             $stmt = $db->prepare("
-                INSERT INTO house (village_id, house_number, owner_name, owner_nic, owner_contact,
+                INSERT INTO house (village_id, house_number, beneficiary_number, owner_name, owner_nic, owner_contact,
                   household_members, land_area_perches, construction_stage_id,
                   is_land_sold, is_house_sold, occupancy_status, has_infrastructure_issues, notes)
-                VALUES (:village_id, :house_number, :owner_name, :owner_nic, :owner_contact,
+                VALUES (:village_id, :house_number, :beneficiary_number, :owner_name, :owner_nic, :owner_contact,
                   :members, :perches, :stage_id,
                   :land_sold, :house_sold, :occupancy, :infra_issues, :notes)
             ");
 
             $stmt->execute([
                 'village_id' => $villageId,
-                'house_number' => trim($body['house_number']),
+                'house_number' => $houseNum,
+                'beneficiary_number' => !empty($body['beneficiary_number']) ? trim($body['beneficiary_number']) : null,
                 'owner_name' => trim($body['owner_name']),
-                'owner_nic' => trim($body['owner_nic']),
+                'owner_nic' => $ownerNic,
                 'owner_contact' => !empty($body['owner_contact']) ? trim($body['owner_contact']) : null,
                 'members' => isset($body['household_members']) && $body['household_members'] !== '' ? (int)$body['household_members'] : null,
                 'perches' => isset($body['land_area_perches']) && $body['land_area_perches'] !== '' ? (float)$body['land_area_perches'] : null,
-                'stage_id' => (int)$body['construction_stage_id'],
+                'stage_id' => !empty($body['construction_stage_id']) ? (int)$body['construction_stage_id'] : 1,
                 'land_sold' => (int)($body['is_land_sold'] ?? 0),
                 'house_sold' => (int)($body['is_house_sold'] ?? 0),
                 'occupancy' => $body['occupancy_status'],
@@ -214,6 +221,44 @@ class HouseController {
             ]);
 
             $id = $db->lastInsertId();
+
+            // Determine village category code to store loan or grant details appropriately
+            $catStmt = $db->prepare("
+                SELECT vc.code AS category_code
+                FROM village v
+                JOIN village_category vc ON v.category_id = vc.id
+                WHERE v.id = :village_id
+            ");
+            $catStmt->execute([':village_id' => $villageId]);
+            $categoryCode = $catStmt->fetchColumn() ?: '';
+
+            // 1. Store Loan record if village category is LOAN and loan_amount is provided
+            if ($categoryCode === 'LOAN' && isset($body['loan_amount']) && $body['loan_amount'] !== '' && (float)$body['loan_amount'] > 0) {
+                $loanStmt = $db->prepare("
+                    INSERT INTO loan (house_id, loan_amount, total_paid_so_far, repayment_status, notes)
+                    VALUES (:house_id, :loan_amount, :total_paid, :repayment_status, :notes)
+                ");
+                $loanStmt->execute([
+                    ':house_id'         => $id,
+                    ':loan_amount'      => (float)$body['loan_amount'],
+                    ':total_paid'       => isset($body['total_paid_so_far']) && $body['total_paid_so_far'] !== '' ? (float)$body['total_paid_so_far'] : 0.00,
+                    ':repayment_status' => !empty($body['repayment_status']) ? $body['repayment_status'] : 'NOT_PAID',
+                    ':notes'            => !empty($body['loan_notes']) ? trim($body['loan_notes']) : null
+                ]);
+            }
+
+            // 2. Store Grant record if village category starts with GRANT and grant_amount is provided
+            if (strpos($categoryCode, 'GRANT') === 0 && isset($body['grant_amount']) && $body['grant_amount'] !== '' && (float)$body['grant_amount'] > 0) {
+                $grantStmt = $db->prepare("
+                    INSERT INTO grant_detail (house_id, grant_amount, notes)
+                    VALUES (:house_id, :grant_amount, :notes)
+                ");
+                $grantStmt->execute([
+                    ':house_id'     => $id,
+                    ':grant_amount' => (float)$body['grant_amount'],
+                    ':notes'        => !empty($body['grant_notes']) ? trim($body['grant_notes']) : null
+                ]);
+            }
 
             http_response_code(201);
             echo json_encode([
@@ -253,6 +298,10 @@ class HouseController {
             $updateFields = [];
             $bindings = [':id' => $id];
 
+            if (isset($body['beneficiary_number'])) {
+                $updateFields[] = "beneficiary_number = :beneficiary_number";
+                $bindings['beneficiary_number'] = trim($body['beneficiary_number']);
+            }
             if (isset($body['owner_name'])) {
                 $updateFields[] = "owner_name = :owner_name";
                 $bindings['owner_name'] = trim($body['owner_name']);
@@ -440,6 +489,7 @@ class HouseController {
                     $bindings = [':id' => $existingHouseId];
 
                     $fieldsMap = [
+                        'beneficiary_number' => 'beneficiary_number',
                         'owner_name' => 'owner_name',
                         'owner_nic' => 'owner_nic',
                         'owner_contact' => 'owner_contact',
@@ -478,10 +528,10 @@ class HouseController {
                 } else {
                     // Insert new house record
                     $insertStmt = $db->prepare("
-                        INSERT INTO house (village_id, house_number, owner_name, owner_nic, owner_contact,
+                        INSERT INTO house (village_id, house_number, beneficiary_number, owner_name, owner_nic, owner_contact,
                           household_members, land_area_perches, construction_stage_id,
                           is_land_sold, is_house_sold, occupancy_status, has_infrastructure_issues, notes)
-                        VALUES (:village_id, :house_number, :owner_name, :owner_nic, :owner_contact,
+                        VALUES (:village_id, :house_number, :beneficiary_number, :owner_name, :owner_nic, :owner_contact,
                           :members, :perches, :stage_id,
                           :land_sold, :house_sold, :occupancy, :infra_issues, :notes)
                     ");
@@ -489,8 +539,9 @@ class HouseController {
                     $insertStmt->execute([
                         ':village_id' => $villageId,
                         ':house_number' => $houseNumber,
+                        ':beneficiary_number' => !empty($row['beneficiary_number']) ? trim($row['beneficiary_number']) : null,
                         ':owner_name' => trim($row['owner_name']),
-                        ':owner_nic' => trim($row['owner_nic']),
+                        ':owner_nic' => !empty($row['owner_nic']) ? trim($row['owner_nic']) : null,
                         ':owner_contact' => !empty($row['owner_contact']) ? trim($row['owner_contact']) : null,
                         ':members' => isset($row['household_members']) && $row['household_members'] !== '' ? (int)$row['household_members'] : null,
                         ':perches' => isset($row['land_area_perches']) && $row['land_area_perches'] !== '' ? (float)$row['land_area_perches'] : null,

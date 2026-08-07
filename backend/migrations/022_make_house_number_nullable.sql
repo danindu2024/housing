@@ -1,0 +1,1 @@
+ALTER TABLE `house` MODIFY `house_number` VARCHAR(50) NULL DEFAULT NULL;

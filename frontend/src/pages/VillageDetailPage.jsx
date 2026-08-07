@@ -13,11 +13,8 @@ const VillageDetailPage = () => {
   const [housesLoading, setHousesLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // House Directory Filter States
-  const [stageCode, setStageCode] = useState('');
-  const [occupancyStatus, setOccupancyStatus] = useState('');
-  const [isHouseSold, setIsHouseSold] = useState('');
-  const [isLandSold, setIsLandSold] = useState('');
+  // House Directory Search State
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Form Modal States
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -42,13 +39,7 @@ const VillageDetailPage = () => {
   const fetchHousesList = async () => {
     setHousesLoading(true);
     try {
-      const params = {};
-      if (stageCode) params.stage_code = stageCode;
-      if (occupancyStatus) params.occupancy_status = occupancyStatus;
-      if (isHouseSold !== '') params.is_house_sold = isHouseSold;
-      if (isLandSold !== '') params.is_land_sold = isLandSold;
-
-      const response = await api.get(`/villages/${id}/houses`, { params });
+      const response = await api.get(`/villages/${id}/houses`);
       setHouses(response.data.data);
     } catch (err) {
       console.error('Failed to load houses ledger:', err);
@@ -63,7 +54,18 @@ const VillageDetailPage = () => {
 
   useEffect(() => {
     fetchHousesList();
-  }, [id, stageCode, occupancyStatus, isHouseSold, isLandSold]);
+  }, [id]);
+
+  // Client-side search filtering by beneficiary number, beneficiary name, house number, or NIC
+  const filteredHouses = houses.filter((h) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase().trim();
+    const benNo = h.beneficiary_number ? h.beneficiary_number.toLowerCase() : '';
+    const ownerName = h.owner_name ? h.owner_name.toLowerCase() : '';
+    const houseNo = h.house_number ? h.house_number.toLowerCase() : '';
+    const ownerNic = h.owner_nic ? h.owner_nic.toLowerCase() : '';
+    return benNo.includes(q) || ownerName.includes(q) || houseNo.includes(q) || ownerNic.includes(q);
+  });
 
   const handleDeleteVillage = async () => {
     setDeleting(true);
@@ -85,26 +87,26 @@ const VillageDetailPage = () => {
     const label = stage?.label || 'Unknown';
 
     if (stageCode === 'FULLY_DEVELOPED') {
-      return <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-100 text-[10px] font-semibold">{label}</span>;
+      return <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-100 text-[12px] font-semibold">{label}</span>;
     }
     if (stageCode === 'NO_FOUNDATION') {
-      return <span className="px-2 py-0.5 rounded bg-slate-50 text-slate-500 border border-slate-100 text-[10px] font-semibold">{label}</span>;
+      return <span className="px-2 py-0.5 rounded bg-slate-50 text-slate-500 border border-slate-100 text-[12px] font-semibold">{label}</span>;
     }
-    return <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-100 text-[10px] font-semibold">{label}</span>;
+    return <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-100 text-[12px] font-semibold">{label}</span>;
   };
 
   const getOccupancyBadge = (status) => {
     const badges = {
-      BORROWER_LIVING: 'text-slate-700 font-semibold',
+      BORROWER_LIVING: 'text-emerald-700 font-semibold bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded',
+      ABANDONED: 'text-indigo-700 font-semibold bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded',
       SOLD: 'text-rose-600 font-bold bg-rose-50 border border-rose-100 px-2 py-0.5 rounded',
-      ABANDONED: 'text-amber-600 font-semibold bg-amber-50 border border-amber-100 px-2 py-0.5 rounded',
       NOT_APPLICABLE: 'text-slate-400 font-medium',
     };
     const labels = {
-      BORROWER_LIVING: 'Occupant',
-      SOLD: 'Sold (Transferred)',
-      ABANDONED: 'Abandoned',
-      NOT_APPLICABLE: 'None',
+      BORROWER_LIVING: 'Beneficiary Owned',
+      ABANDONED: 'House Rented',
+      SOLD: 'Land/House Sold',
+      NOT_APPLICABLE: '-',
     };
     return <span className={`text-xs ${badges[status] || ''}`}>{labels[status] || status}</span>;
   };
@@ -372,86 +374,39 @@ const VillageDetailPage = () => {
           <p className="text-2xl font-black text-slate-800">{village.summary.total_houses} / {village.total_planned_houses}</p>
           <span className="text-[10px] text-slate-500 font-medium block">Allotment registration</span>
         </div>
-
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-1">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Fully Developed</span>
-          <p className="text-2xl font-black text-emerald-600">{village.summary.fully_developed}</p>
-          <span className="text-[10px] text-slate-500 font-medium block">Roof & plastering done</span>
-        </div>
-
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-1">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Unlawful Transfers</span>
-          <p className="text-2xl font-black text-rose-600">
-            {parseInt(village.summary.land_sold_count) + parseInt(village.summary.house_sold_count)}
-          </p>
-          <span className="text-[10px] text-slate-500 font-medium block">Sold properties & allotments</span>
-        </div>
-
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-1">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Active Open Issues</span>
-          <p className="text-2xl font-black text-amber-600">{village.summary.open_issues}</p>
-          <span className="text-[10px] text-slate-500 font-medium block">Pending DS audit actions</span>
-        </div>
       </div>
 
       {/* Houses list Section */}
       <div className="space-y-4">
         <h2 className="text-lg font-bold text-slate-800 tracking-tight">Recorded Houses Ledger</h2>
 
-        {/* Houses filtering panel */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 flex flex-col md:flex-row md:items-center gap-4">
-          <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div>
-              <select
-                value={stageCode}
-                onChange={(e) => setStageCode(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 bg-slate-50 focus:bg-white transition-all"
-              >
-                <option value="">All Progress Stages</option>
-                <option value="NO_FOUNDATION">No Foundation</option>
-                <option value="FULLY_DEVELOPED">House Fully Developed</option>
-              </select>
+        {/* Houses Search Bar Panel */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+          <div className="relative w-full">
+            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
             </div>
-
-            <div>
-              <select
-                value={occupancyStatus}
-                onChange={(e) => setOccupancyStatus(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 bg-slate-50 focus:bg-white transition-all"
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="ප්‍රතිලාභී අංකය හෝ නම මගින් සොයන්න / Search by Beneficiary Number or Name"
+              className="w-full pl-11 pr-10 py-3 rounded-xl border border-slate-200 bg-slate-50 text-sm font-semibold text-slate-700 focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all outline-none"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
+                title="Clear search"
               >
-                <option value="">All Occupancies</option>
-                <option value="BORROWER_LIVING">Borrower Living</option>
-                <option value="SOLD">Property Transferred (Sold)</option>
-                <option value="ABANDONED">Abandoned</option>
-              </select>
-            </div>
-
-            <div>
-              <select
-                value={isLandSold}
-                onChange={(e) => setIsLandSold(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 bg-slate-50 focus:bg-white transition-all"
-              >
-                <option value="">All Land Statuses</option>
-                <option value="1">Allotment Land Sold</option>
-                <option value="0">Allotment Land Intact</option>
-              </select>
-            </div>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
           </div>
-
-          {(stageCode || occupancyStatus || isLandSold !== '') && (
-            <button
-              onClick={() => {
-                setStageCode('');
-                setOccupancyStatus('');
-                setIsLandSold('');
-                setIsHouseSold('');
-              }}
-              className="text-xs font-bold text-slate-400 hover:text-indigo-600 transition-colors uppercase tracking-wider mt-2 md:mt-0"
-            >
-              Reset Filters
-            </button>
-          )}
         </div>
 
         {/* Houses Ledger Table */}
@@ -460,33 +415,33 @@ const VillageDetailPage = () => {
             <div className="w-8 h-8 border-2 border-slate-100 border-t-indigo-600 rounded-full animate-spin mb-4" />
             <p className="text-slate-400 text-xs font-medium">Updating houses directory...</p>
           </div>
-        ) : houses.length === 0 ? (
+        ) : filteredHouses.length === 0 ? (
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-12 text-center text-slate-400 text-xs font-medium">
-            No house records match your current directory filters. Click 'Register House' to seed a new unit.
+            {searchQuery
+              ? `No house records match your search "${searchQuery}".`
+              : "No house records registered in this village yet. Click 'Register House' to seed a new unit."}
           </div>
         ) : (
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                    <th className="px-6 py-4">House No</th>
-                    <th className="px-6 py-4">Allotment Owner Details</th>
-                    <th className="px-6 py-4">Construction Stage</th>
-                    <th className="px-6 py-4">Occupant status</th>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-[13px] font-bold text-slate-500 uppercase tracking-wider">
+                    <th className="px-6 py-4">Owner Details</th>
+                    <th className="px-6 py-4">Construction Progress</th>
+                    <th className="px-6 py-4">Ownership</th>
                     {isLoanVillage && <th className="px-6 py-4 text-center">Loan issued</th>}
-                    <th className="px-6 py-4">Illegal sale</th>
+                    <th className="px-6 py-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-sm text-slate-600">
-                  {houses.map((h) => (
+                  {filteredHouses.map((h) => (
                     <tr key={h.id} className="hover:bg-slate-50/30 transition-colors">
-                      <td className="px-6 py-4 font-bold text-slate-800">{h.house_number}</td>
                       <td className="px-6 py-4">
                         <div>
                           <span className="font-semibold text-slate-800">{h.owner_name}</span>
-                          <p className="text-[10px] text-slate-400 font-medium mt-0.5">
-                            NIC: {h.owner_nic} &bull; Ph: {h.owner_contact || 'None'}
+                          <p className="text-xs text-slate-500 font-medium mt-0.5">
+                            Ben No: {h.beneficiary_number || 'N/A'}
                           </p>
                         </div>
                       </td>
@@ -503,22 +458,17 @@ const VillageDetailPage = () => {
                           )}
                         </td>
                       )}
-                      <td className="px-6 py-4">
-                        <div className="flex flex-col gap-0.5">
-                          {h.is_land_sold && (
-                            <span className="text-[9px] font-bold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded w-max">
-                              Land Sold
-                            </span>
-                          )}
-                          {h.is_house_sold && (
-                            <span className="text-[9px] font-bold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded w-max mt-0.5">
-                              House Sold
-                            </span>
-                          )}
-                          {!h.is_land_sold && !h.is_house_sold && (
-                            <span className="text-slate-400 text-xs">No</span>
-                          )}
-                        </div>
+                      <td className="px-6 py-4 text-right">
+                        <button
+                          type="button"
+                          onClick={() => {/* View house feature to be implemented later */}}
+                          className="inline-flex items-center gap-1.5 px-4 py-2 border border-slate-200 hover:border-indigo-200 text-xs font-bold text-indigo-650 hover:text-white bg-slate-50/50 hover:bg-indigo-600 rounded-xl transition-all shadow-sm active:scale-95"
+                        >
+                          <span>View House</span>
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7" />
+                          </svg>
+                        </button>
                       </td>
                     </tr>
                   ))}
