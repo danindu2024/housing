@@ -40,6 +40,7 @@ const SingleVillageForm = () => {
   const [gnSearchFocus, setGnSearchFocus] = useState(false);
   const [fetchingGn, setFetchingGn] = useState(false);
   const gnRef = useRef(null);
+  const bannerRef = useRef(null);
 
   // Status & Validation states
   const [errors, setErrors] = useState({});
@@ -233,9 +234,10 @@ const SingleVillageForm = () => {
     setGnSearchFocus(false);
   };
 
-  // 7. Form submission with status override
+  // 7. Form submission with status override (no redirection, stays on page)
   const handleSubmitWithStatus = async (statusOverride) => {
     setErrors({});
+    setSuccessMsg('');
     setSubmitting(true);
 
     const trimmedFormData = {};
@@ -257,15 +259,15 @@ const SingleVillageForm = () => {
       const response = await api.post('/villages', payload);
       
       if (response.data.merged) {
-        setSuccessMsg('Existing incomplete record updated and enriched successfully!');
+        setSuccessMsg('පවතින ගම්මාන තොරතුරු සාර්ථකව යාවත්කාලීන කරන ලදී! (Existing village record updated successfully!)');
       } else {
-        setSuccessMsg('Village registered successfully!');
+        setSuccessMsg('ගම්මානය සාර්ථකව ලියාපදිංචි කරන ලදී! (Village registered successfully!)');
       }
       
-      // Redirect to village list after 1.5 seconds
+      // Smooth scroll to bottom banner
       setTimeout(() => {
-        navigate(`/villages/${response.data.id}`);
-      }, 1500);
+        bannerRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
     } catch (err) {
       console.error('Validation failed on server:', err);
       if (err.response?.status === 400 && err.response?.data?.details) {
@@ -276,18 +278,15 @@ const SingleVillageForm = () => {
       } else {
         setErrors({ global: err.response?.data?.error || 'Failed to register village record.' });
       }
-      setScrollToggle((prev) => !prev);
+      
+      // Smooth scroll to bottom banner
+      setTimeout(() => {
+        bannerRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
     } finally {
       setSubmitting(false);
     }
   };
-
-  // 8. Auto scroll to the top of the page on submit failure
-  useEffect(() => {
-    if (Object.keys(errors).length > 0) {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-  }, [scrollToggle]);
 
   const handleNativeSubmit = (e) => {
     e.preventDefault();
@@ -295,48 +294,17 @@ const SingleVillageForm = () => {
   };
 
   return (
-    <div className="max-w-4xl mx-auto">
-      {/* Success Banner */}
-      {successMsg && (
-        <div className="mb-6 rounded-2xl bg-emerald-50 border border-emerald-100 p-6 flex items-start gap-4 shadow-sm">
-          <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 flex-shrink-0">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-            </svg>
-          </div>
-          <div>
-            <h3 className="font-bold text-slate-800">Success</h3>
-            <p className="text-sm text-slate-500 mt-1">{successMsg} Redirecting you to details ledger...</p>
-          </div>
-        </div>
-      )}
-
-      {/* Comprehensive Error Banner */}
-      {Object.keys(errors).length > 0 && (
-        <div className="mb-6 rounded-2xl bg-rose-50 border border-rose-100 p-6 flex items-start gap-4 shadow-sm">
-          <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 flex-shrink-0">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-          </div>
-          <div className="flex-1">
-            <h3 className="font-bold text-rose-800">ඇතුලත් කිරීම අසාර්ථක විය (Registration Failed)</h3>
-            {errors.global ? (
-              <p className="text-sm text-rose-700 mt-1">{errors.global}</p>
-            ) : (
-              <div className="mt-2 text-xs text-rose-750 space-y-1">
-                <p className="font-semibold">පහත දක්වා ඇති දත්ත නිවැරදි කර නැවත උත්සාහ කරන්න (Please correct the following errors)</p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
+    <div className="max-w-4xl mx-auto pb-12">
       {/* Entry Form Card */}
       <form onSubmit={handleNativeSubmit} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="p-8 border-b border-slate-100 bg-slate-50/50">
-          <h2 className="text-xl font-bold text-slate-800">New Village Registration Form</h2>
-          <p className="text-sm text-slate-600 mt-1">Fill below details correctly/ පහත දක්වා ඇති තොරතුරු නිවැරදිව පුරවන්න</p>
+        <div className="p-8 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <h2 className="text-xl font-bold text-slate-800">New Village Registration Form</h2>
+            <p className="text-sm text-slate-600 mt-1">Fill below details correctly/ පහත දක්වා ඇති තොරතුරු නිවැරදිව පුරවන්න</p>
+          </div>
+          <p className="text-xs font-semibold text-slate-500">
+            <span className="text-rose-500 font-bold">*</span> Mandatory fields
+          </p>
         </div>
 
         <div className="p-8 space-y-8">
@@ -345,7 +313,7 @@ const SingleVillageForm = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-bold uppercase tracking-wider text-slate-500 mb-2">
-                Village Name/ ගම්මානයේ නම
+                Village Name/ ගම්මානයේ නම <span className="text-rose-500 font-bold ml-0.5">*</span>
               </label>
               <input
                 type="text"
@@ -364,7 +332,7 @@ const SingleVillageForm = () => {
 
             <div>
               <label className="block text-sm font-bold uppercase tracking-wider text-slate-500 mb-2">
-                Funding Method/ මුදල් සම්පාදන ක්‍රමය
+                Funding Method/ මුදල් සම්පාදන ක්‍රමය <span className="text-rose-500 font-bold ml-0.5">*</span>
               </label>
               <select
                 name="category_id"
@@ -420,7 +388,7 @@ const SingleVillageForm = () => {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div>
                 <label className="block text-sm font-bold uppercase tracking-wider text-slate-500 mb-2">
-                  Province/ පළාත
+                  Province/ පළාත <span className="text-rose-500 font-bold ml-0.5">*</span>
                 </label>
                 <select
                   name="province"
@@ -439,7 +407,7 @@ const SingleVillageForm = () => {
 
               <div>
                 <label className="block text-sm font-bold uppercase tracking-wider text-slate-500 mb-2">
-                  District/ දිස්ත්‍රික්කය
+                  District/ දිස්ත්‍රික්කය <span className="text-rose-500 font-bold ml-0.5">*</span>
                 </label>
                 <select
                   name="district_id"
@@ -459,7 +427,7 @@ const SingleVillageForm = () => {
 
               <div>
                 <label className="block text-sm font-bold uppercase tracking-wider text-slate-500 mb-2">
-                  DS/ ප්‍රාදේශීය ලේකම් කොට්ඨාශය
+                  DS/ ප්‍රාදේශීය ලේකම් කොට්ඨාශය <span className="text-rose-500 font-bold ml-0.5">*</span>
                 </label>
                 <select
                   name="division_id"
@@ -543,9 +511,9 @@ const SingleVillageForm = () => {
                 {errors.boundary_type && <p className="text-xs text-rose-500 font-medium mt-1.5">{errors.boundary_type[0]}</p>}
               </div>
 
-              <div className="md:col-span-2">
+              <div>
                 <label className="block text-sm font-bold uppercase tracking-wider text-slate-500 mb-2">
-                  Planned Houses/ ඉදිකිරීමට සැළසුම්කල නිවාස සංඛ්‍යාව
+                  Planned Houses/ ඉදිකිරීමට සැළසුම්කල නිවාස සංඛ්‍යාව <span className="text-rose-500 font-bold ml-0.5">*</span>
                 </label>
                 <input
                   type="number"
@@ -596,7 +564,7 @@ const SingleVillageForm = () => {
           {/* Section 3: Status & Dates */}
           <div>
             <h3 className="text-xs font-black uppercase tracking-widest text-indigo-500 mb-4">Status & Flags</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-bold uppercase tracking-wider text-slate-500 mb-2">
                   Is open to public/ මහජනතාවට විවෘතද?
@@ -617,10 +585,13 @@ const SingleVillageForm = () => {
               </div>
 
               <div className="w-full md:col-span-3">
-                  <label className="block text-sm font-bold uppercase tracking-wider text-slate-500 mb-3">
+                  <label className="block text-sm font-bold uppercase tracking-wider text-slate-500 mb-1">
                     Infrastructure/ යටිතල පහසුකම්
                   </label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 bg-white p-4 rounded-xl border border-slate-200">
+                  <p className="text-xs text-slate-600 font-medium mb-3">
+                    Select available facilities/ වත්මන් යටිතල පහසුකම් තෝරන්න
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-4 bg-white p-4 rounded-xl border border-slate-200">
                     {[
                       { value: 'WATER', label: 'ජලය (water)' },
                       { value: 'ELECTRICITY', label: 'විදුලිය (electricity)' },
@@ -710,6 +681,63 @@ const SingleVillageForm = () => {
           </button>
         </div>
       </form>
+
+      {/* Bottom Success / Failure Banners */}
+      <div ref={bannerRef} className="mt-6 space-y-4">
+        {successMsg && (
+          <div className="rounded-2xl bg-emerald-50 border border-emerald-200 p-6 flex items-start gap-4 shadow-md">
+            <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 flex-shrink-0">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <h3 className="font-bold text-slate-800 text-base">සාර්ථකයි! (Success)</h3>
+              <p className="text-sm text-emerald-800 mt-1 font-medium">{successMsg}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSuccessMsg('')}
+              className="text-slate-400 hover:text-slate-600 p-1"
+              aria-label="Dismiss banner"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        )}
+
+        {Object.keys(errors).length > 0 && (
+          <div className="rounded-2xl bg-rose-50 border border-rose-200 p-6 flex items-start gap-4 shadow-md">
+            <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 flex-shrink-0">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <h3 className="font-bold text-rose-800 text-base">ඇතුලත් කිරීම අසාර්ථක විය (Registration Failed)</h3>
+              {errors.global ? (
+                <p className="text-sm text-rose-700 mt-1 font-medium">{errors.global}</p>
+              ) : (
+                <div className="mt-2 text-xs text-rose-750 space-y-1">
+                  <p className="font-semibold">ඉහත දක්වා ඇති දත්ත නිවැරදි කර නැවත උත්සාහ කරන්න (Please correct the errors in the form above and try again)</p>
+                </div>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setErrors({})}
+              className="text-slate-400 hover:text-slate-600 p-1"
+              aria-label="Dismiss banner"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 };
