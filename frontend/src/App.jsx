@@ -12,6 +12,7 @@ import VillageListPage from './pages/VillageListPage';
 import VillageDetailPage from './pages/VillageDetailPage';
 import DashboardPage from './pages/DashboardPage';
 import VillageForm from './components/village/VillageForm';
+import SingleVillageForm from './components/village/SingleVillageForm';
 import LoanForm from './components/loan/LoanForm';
 import HouseRegistrationPage from './pages/HouseRegistrationPage';
 
@@ -90,6 +91,14 @@ function App() {
             element={
               <AppLayout title="Village Details & Houses Ledger">
                 <VillageDetailPage />
+              </AppLayout>
+            }
+          />
+          <Route
+            path="/villages/:id/edit"
+            element={
+              <AppLayout title="Edit Village Details">
+                <SingleVillageForm isEditMode={true} />
               </AppLayout>
             }
           />
