@@ -700,12 +700,24 @@ class VillageController {
         try {
             $db = Database::getConnection();
 
-            // Verify village exists
-            $checkStmt = $db->prepare("SELECT id FROM village WHERE id = :id");
+            // Verify village exists & fetch current updated_at for optimistic locking
+            $checkStmt = $db->prepare("SELECT id, updated_at FROM village WHERE id = :id");
             $checkStmt->execute([':id' => $id]);
-            if (!$checkStmt->fetch()) {
+            $existing = $checkStmt->fetch(\PDO::FETCH_ASSOC);
+            if (!$existing) {
                 http_response_code(404);
                 echo json_encode(['error' => 'Village record not found.']);
+                return;
+            }
+
+            // Optimistic concurrency check: reject if the record was modified since form load
+            if (!empty($body['updated_at']) && $existing['updated_at'] !== $body['updated_at']) {
+                http_response_code(409);
+                echo json_encode([
+                    'error' => 'Concurrent modification detected. This village record was updated by another user after you opened the form. Please reload the page and try again.',
+                    'conflict' => true,
+                    'server_updated_at' => $existing['updated_at'],
+                ]);
                 return;
             }
 

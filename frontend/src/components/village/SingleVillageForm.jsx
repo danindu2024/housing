@@ -51,6 +51,13 @@ const SingleVillageForm = ({ isEditMode: propIsEditMode }) => {
   const [successMsg, setSuccessMsg] = useState('');
   const [scrollToggle, setScrollToggle] = useState(false);
 
+  // Track whether reference data loaded (even partially) so village fetch can proceed
+  const [refsLoaded, setRefsLoaded] = useState(false);
+  const [refsError, setRefsError] = useState(false);
+
+  // Stores the updated_at timestamp captured when the village was loaded for editing
+  const loadedUpdatedAt = useRef(null);
+
   // 1. Load initial reference lookup lists
   useEffect(() => {
     const fetchReferences = async () => {
@@ -70,6 +77,9 @@ const SingleVillageForm = ({ isEditMode: propIsEditMode }) => {
         setProvinces(uniqueProvinces);
       } catch (err) {
         console.error('Failed to load form lookup references:', err);
+        setRefsError(true); // mark so village pre-load still fires with empty tree
+      } finally {
+        setRefsLoaded(true); // always signal completion (success or fail)
       }
     };
 
@@ -77,63 +87,76 @@ const SingleVillageForm = ({ isEditMode: propIsEditMode }) => {
   }, []);
 
   // Pre-load existing village data when in Edit Mode
+  // Decoupled from districtsTree: triggers once references have finished loading (success OR fail)
+  // so a districts API failure doesn't silently stall the village pre-load forever.
   useEffect(() => {
-    if (isEditMode && id && districtsTree.length > 0) {
-      const fetchVillageData = async () => {
-        setLoadingVillage(true);
-        try {
-          const res = await api.get(`/villages/${id}`);
-          const v = res.data;
+    if (!isEditMode || !id || !refsLoaded) return;
 
-          let matchedProvince = v.province || '';
-          let matchedDistrictId = '';
-          let matchedDivisions = [];
-          let matchedDistricts = [];
+    const fetchVillageData = async () => {
+      setLoadingVillage(true);
+      try {
+        const res = await api.get(`/villages/${id}`);
+        const v = res.data;
 
-          if (v.division_id) {
-            for (const dist of districtsTree) {
-              const div = dist.divisions?.find((d) => d.id === v.division_id);
-              if (div) {
-                matchedDistrictId = dist.id;
-                matchedProvince = dist.province;
-                matchedDistricts = districtsTree.filter((d) => d.province === matchedProvince);
-                matchedDivisions = dist.divisions;
-                break;
-              }
+        // Capture updated_at for optimistic concurrency locking on submit
+        loadedUpdatedAt.current = v.updated_at || null;
+
+        let matchedProvince = v.province || '';
+        let matchedDistrictId = '';
+        let matchedDivisions = [];
+        let matchedDistricts = [];
+
+        // Only cascade location if districts tree loaded successfully
+        if (!refsError && v.division_id && districtsTree.length > 0) {
+          for (const dist of districtsTree) {
+            const div = dist.divisions?.find((d) => d.id === v.division_id);
+            if (div) {
+              matchedDistrictId = dist.id;
+              matchedProvince = dist.province;
+              matchedDistricts = districtsTree.filter((d) => d.province === matchedProvince);
+              matchedDivisions = dist.divisions;
+              break;
             }
           }
-
-          setDistricts(matchedDistricts);
-          setDivisions(matchedDivisions);
-
-          setFormData({
-            name: v.name || '',
-            province: matchedProvince,
-            district_id: matchedDistrictId,
-            division_id: v.division_id || '',
-            category_id: v.category_id || '',
-            ownership_body_id: v.ownership_body_id || '',
-            grama_niladhari_division: v.grama_niladhari_division || '',
-            boundary_type: v.boundary_type || '',
-            total_planned_houses: v.total_planned_houses !== null && v.total_planned_houses !== undefined ? v.total_planned_houses : '',
-            status: v.status || '',
-            is_conservation_area: v.is_conservation_area || 'NONE',
-            infrastructure_issues: Array.isArray(v.infrastructure_issues) ? v.infrastructure_issues : [],
-            program_start_date: v.program_start_date || '',
-            notes: v.notes || '',
-            google_map_link: v.google_map_link || '',
-          });
-        } catch (err) {
-          console.error('Failed to load existing village record for editing:', err);
-          setErrors({ global: 'Failed to load village details for editing.' });
-        } finally {
-          setLoadingVillage(false);
         }
-      };
 
-      fetchVillageData();
-    }
-  }, [id, isEditMode, districtsTree]);
+        setDistricts(matchedDistricts);
+        setDivisions(matchedDivisions);
+
+        setFormData({
+          name: v.name || '',
+          province: matchedProvince,
+          district_id: matchedDistrictId,
+          division_id: v.division_id || '',
+          category_id: v.category_id || '',
+          ownership_body_id: v.ownership_body_id || '',
+          grama_niladhari_division: v.grama_niladhari_division || '',
+          boundary_type: v.boundary_type || '',
+          total_planned_houses: v.total_planned_houses !== null && v.total_planned_houses !== undefined ? v.total_planned_houses : '',
+          status: v.status || '',
+          is_conservation_area: v.is_conservation_area || 'NONE',
+          infrastructure_issues: Array.isArray(v.infrastructure_issues) ? v.infrastructure_issues : [],
+          program_start_date: v.program_start_date || '',
+          notes: v.notes || '',
+          google_map_link: v.google_map_link || '',
+        });
+
+        if (refsError) {
+          // Warn user that location dropdowns may not be pre-selectable
+          setErrors({
+            global_warn: 'Location reference data could not be loaded. Location fields may need to be re-selected manually.'
+          });
+        }
+      } catch (err) {
+        console.error('Failed to load existing village record for editing:', err);
+        setErrors({ global: 'Failed to load village details for editing. Please refresh the page.' });
+      } finally {
+        setLoadingVillage(false);
+      }
+    };
+
+    fetchVillageData();
+  }, [id, isEditMode, refsLoaded]);
 
   // 2. Fetch GN Divisions dynamically from the public repository
   useEffect(() => {
@@ -315,6 +338,8 @@ const SingleVillageForm = ({ isEditMode: propIsEditMode }) => {
     const payload = {
       ...trimmedFormData,
       status: statusOverride,
+      // Include the timestamp captured at form-load for optimistic concurrency locking
+      ...(isEditMode && loadedUpdatedAt.current ? { updated_at: loadedUpdatedAt.current } : {}),
     };
 
     try {
@@ -341,8 +366,13 @@ const SingleVillageForm = ({ isEditMode: propIsEditMode }) => {
       console.error('Validation failed on server:', err);
       if (err.response?.status === 400 && err.response?.data?.details) {
         setErrors(err.response.data.details);
+      } else if (err.response?.status === 409 && err.response?.data?.conflict) {
+        // Concurrent edit conflict: another user modified this record since form was opened
+        setErrors({
+          global: 'ගම්මානය ඔබ ලෝඩ් කිරීමෙන් පසු සෙස්සෙකු සංශෝධනය කර ඇත. (This village was modified by someone else after you opened the form. Please go back, reload, and try again.)'
+        });
       } else if (err.response?.status === 409 && err.response?.data?.details) {
-        // Handle natural key conflict explicitly
+        // Name/division natural key conflict
         setErrors(err.response.data.details);
       } else {
         setErrors({ global: err.response?.data?.error || 'Failed to submit village record.' });
@@ -403,6 +433,16 @@ const SingleVillageForm = ({ isEditMode: propIsEditMode }) => {
         </div>
 
         <div className="p-8 space-y-8">
+          {/* Reference data fallback warning */}
+          {errors.global_warn && (
+            <div className="rounded-xl bg-amber-50 border border-amber-200 p-4 flex items-start gap-3">
+              <svg className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <p className="text-xs font-semibold text-amber-800">{errors.global_warn}</p>
+            </div>
+          )}
+
           {/* Section 1: Basic details */}
           <h3 className="text-xs font-black uppercase tracking-widest text-indigo-500 mb-4">Primary Details</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
