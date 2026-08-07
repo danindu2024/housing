@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import api from '../../api/axios';
 
-const SingleVillageForm = () => {
+const SingleVillageForm = ({ isEditMode: propIsEditMode }) => {
   const navigate = useNavigate();
+  const { id } = useParams();
+  const isEditMode = Boolean(propIsEditMode || id);
 
   // Form Inputs State
   const [formData, setFormData] = useState({
@@ -45,6 +47,7 @@ const SingleVillageForm = () => {
   // Status & Validation states
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
+  const [loadingVillage, setLoadingVillage] = useState(isEditMode);
   const [successMsg, setSuccessMsg] = useState('');
   const [scrollToggle, setScrollToggle] = useState(false);
 
@@ -72,6 +75,65 @@ const SingleVillageForm = () => {
 
     fetchReferences();
   }, []);
+
+  // Pre-load existing village data when in Edit Mode
+  useEffect(() => {
+    if (isEditMode && id && districtsTree.length > 0) {
+      const fetchVillageData = async () => {
+        setLoadingVillage(true);
+        try {
+          const res = await api.get(`/villages/${id}`);
+          const v = res.data;
+
+          let matchedProvince = v.province || '';
+          let matchedDistrictId = '';
+          let matchedDivisions = [];
+          let matchedDistricts = [];
+
+          if (v.division_id) {
+            for (const dist of districtsTree) {
+              const div = dist.divisions?.find((d) => d.id === v.division_id);
+              if (div) {
+                matchedDistrictId = dist.id;
+                matchedProvince = dist.province;
+                matchedDistricts = districtsTree.filter((d) => d.province === matchedProvince);
+                matchedDivisions = dist.divisions;
+                break;
+              }
+            }
+          }
+
+          setDistricts(matchedDistricts);
+          setDivisions(matchedDivisions);
+
+          setFormData({
+            name: v.name || '',
+            province: matchedProvince,
+            district_id: matchedDistrictId,
+            division_id: v.division_id || '',
+            category_id: v.category_id || '',
+            ownership_body_id: v.ownership_body_id || '',
+            grama_niladhari_division: v.grama_niladhari_division || '',
+            boundary_type: v.boundary_type || '',
+            total_planned_houses: v.total_planned_houses !== null && v.total_planned_houses !== undefined ? v.total_planned_houses : '',
+            status: v.status || '',
+            is_conservation_area: v.is_conservation_area || 'NONE',
+            infrastructure_issues: Array.isArray(v.infrastructure_issues) ? v.infrastructure_issues : [],
+            program_start_date: v.program_start_date || '',
+            notes: v.notes || '',
+            google_map_link: v.google_map_link || '',
+          });
+        } catch (err) {
+          console.error('Failed to load existing village record for editing:', err);
+          setErrors({ global: 'Failed to load village details for editing.' });
+        } finally {
+          setLoadingVillage(false);
+        }
+      };
+
+      fetchVillageData();
+    }
+  }, [id, isEditMode, districtsTree]);
 
   // 2. Fetch GN Divisions dynamically from the public repository
   useEffect(() => {
@@ -256,18 +318,25 @@ const SingleVillageForm = () => {
     };
 
     try {
-      const response = await api.post('/villages', payload);
-      
-      if (response.data.merged) {
-        setSuccessMsg('පවතින ගම්මාන තොරතුරු සාර්ථකව යාවත්කාලීන කරන ලදී! (Existing village record updated successfully!)');
+      let response;
+      if (isEditMode) {
+        response = await api.put(`/villages/${id}`, payload);
+        setSuccessMsg('ගම්මාන තොරතුරු සාර්ථකව සංශෝධනය කරන ලදී! (Village details updated successfully!)');
+        setTimeout(() => {
+          navigate(`/villages/${id}`);
+        }, 1200);
       } else {
-        setSuccessMsg('ගම්මානය සාර්ථකව ලියාපදිංචි කරන ලදී! (Village registered successfully!)');
+        response = await api.post('/villages', payload);
+        if (response.data.merged) {
+          setSuccessMsg('පවතින ගම්මාන තොරතුරු සාර්ථකව යාවත්කාලීන කරන ලදී! (Existing village record updated successfully!)');
+        } else {
+          setSuccessMsg('ගම්මානය සාර්ථකව ලියාපදිංචි කරන ලදී! (Village registered successfully!)');
+        }
+        // Smooth scroll to bottom banner for new village registration
+        setTimeout(() => {
+          bannerRef.current?.scrollIntoView({ behavior: 'smooth' });
+        }, 100);
       }
-      
-      // Smooth scroll to bottom banner
-      setTimeout(() => {
-        bannerRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }, 100);
     } catch (err) {
       console.error('Validation failed on server:', err);
       if (err.response?.status === 400 && err.response?.data?.details) {
@@ -276,7 +345,7 @@ const SingleVillageForm = () => {
         // Handle natural key conflict explicitly
         setErrors(err.response.data.details);
       } else {
-        setErrors({ global: err.response?.data?.error || 'Failed to register village record.' });
+        setErrors({ global: err.response?.data?.error || 'Failed to submit village record.' });
       }
       
       // Smooth scroll to bottom banner
@@ -293,14 +362,40 @@ const SingleVillageForm = () => {
     handleSubmitWithStatus(formData.status);
   };
 
+  if (loadingVillage) {
+    return (
+      <div className="max-w-4xl mx-auto py-20 flex flex-col items-center justify-center bg-white rounded-2xl border border-slate-200 shadow-sm">
+        <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mb-4" />
+        <p className="text-sm font-bold text-slate-700">Loading village details for editing...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-4xl mx-auto pb-12">
+      {isEditMode && (
+        <div className="mb-4">
+          <button
+            onClick={() => navigate(`/villages/${id}`)}
+            className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-slate-500 hover:text-slate-800 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            </svg>
+            Back to Village Details
+          </button>
+        </div>
+      )}
       {/* Entry Form Card */}
       <form onSubmit={handleNativeSubmit} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="p-8 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
-            <h2 className="text-xl font-bold text-slate-800">New Village Registration Form</h2>
-            <p className="text-sm text-slate-600 mt-1">Fill below details correctly/ පහත දක්වා ඇති තොරතුරු නිවැරදිව පුරවන්න</p>
+            <h2 className="text-xl font-bold text-slate-800">
+              {isEditMode ? 'Edit Village Details / ගම්මානයේ තොරතුරු සංශෝධනය' : 'New Village Registration Form'}
+            </h2>
+            <p className="text-sm text-slate-600 mt-1">
+              {isEditMode ? 'Modify details below / පහත දක්වා ඇති තොරතුරු සංශෝධනය කරන්න' : 'Fill below details correctly/ පහත දක්වා ඇති තොරතුරු නිවැරදිව පුරවන්න'}
+            </p>
           </div>
           <p className="text-xs font-semibold text-slate-500">
             <span className="text-rose-500 font-bold">*</span> Mandatory fields
@@ -673,10 +768,10 @@ const SingleVillageForm = () => {
             {submitting ? (
               <>
                 <div className="w-4 h-4 border-2 border-indigo-200 border-t-white rounded-full animate-spin" />
-                <span>Saving Details...</span>
+                <span>{isEditMode ? 'Updating Details...' : 'Saving Details...'}</span>
               </>
             ) : (
-              'Save Details'
+              isEditMode ? 'Update Details' : 'Save Details'
             )}
           </button>
         </div>
