@@ -38,6 +38,26 @@ class VillageController {
             
             $bindings = [];
 
+            if (!empty($filters['search'])) {
+                $sql .= " AND v.name LIKE :search";
+                $bindings['search'] = '%' . trim($filters['search']) . '%';
+            }
+            if (!empty($filters['province'])) {
+                $sql .= " AND d.province = :province";
+                $bindings['province'] = trim($filters['province']);
+            }
+            if (!empty($filters['district_id']) && is_numeric($filters['district_id'])) {
+                $sql .= " AND d.id = :district_id";
+                $bindings['district_id'] = (int)$filters['district_id'];
+            }
+            if (!empty($filters['division_id']) && is_numeric($filters['division_id'])) {
+                $sql .= " AND v.division_id = :division_id";
+                $bindings['division_id'] = (int)$filters['division_id'];
+            }
+            if (!empty($filters['grama_niladhari_division'])) {
+                $sql .= " AND v.grama_niladhari_division LIKE :gn";
+                $bindings['gn'] = '%' . trim($filters['grama_niladhari_division']) . '%';
+            }
             if (!empty($filters['category'])) {
                 $sql .= " AND vc.code = :category";
                 $bindings['category'] = $filters['category'];
@@ -48,10 +68,6 @@ class VillageController {
                     $sql .= " AND v.status = :status";
                     $bindings['status'] = $statusFilter;
                 }
-            }
-            if (!empty($filters['division_id']) && is_numeric($filters['division_id'])) {
-                $sql .= " AND v.division_id = :division_id";
-                $bindings['division_id'] = (int)$filters['division_id'];
             }
             if (isset($filters['is_conservation_area']) && $filters['is_conservation_area'] !== '') {
                 if ($filters['is_conservation_area'] === '1' || $filters['is_conservation_area'] === 'true') {
@@ -82,9 +98,15 @@ class VillageController {
                 JOIN village_category vc ON v.category_id = vc.id
                 LEFT JOIN land_ownership_body lob ON v.ownership_body_id = lob.id
                 JOIN division dv ON v.division_id = dv.id
+                JOIN district d ON dv.district_id = d.id
                 WHERE 1=1
             ";
             
+            if (!empty($filters['search'])) $countSql .= " AND v.name LIKE :search";
+            if (!empty($filters['province'])) $countSql .= " AND d.province = :province";
+            if (!empty($filters['district_id']) && is_numeric($filters['district_id'])) $countSql .= " AND d.id = :district_id";
+            if (!empty($filters['division_id']) && is_numeric($filters['division_id'])) $countSql .= " AND v.division_id = :division_id";
+            if (!empty($filters['grama_niladhari_division'])) $countSql .= " AND v.grama_niladhari_division LIKE :gn";
             if (!empty($filters['category'])) $countSql .= " AND vc.code = :category";
             if (!empty($filters['status'])) {
                 $statusFilter = strtoupper(trim($filters['status']));
@@ -92,7 +114,6 @@ class VillageController {
                     $countSql .= " AND v.status = :status";
                 }
             }
-            if (!empty($filters['division_id']) && is_numeric($filters['division_id'])) $countSql .= " AND v.division_id = :division_id";
             if (isset($filters['is_conservation_area']) && $filters['is_conservation_area'] !== '') {
                 if ($filters['is_conservation_area'] === '1' || $filters['is_conservation_area'] === 'true') {
                     $countSql .= " AND v.is_conservation_area <> 'NONE'";
