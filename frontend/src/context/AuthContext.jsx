@@ -9,16 +9,36 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Restore authentication details from localStorage on app boot
     const storedToken = localStorage.getItem('token');
-    const storedUser = localStorage.getItem('user');
-    
+    const storedUser  = localStorage.getItem('user');
+
     if (storedToken && storedUser) {
-      setToken(storedToken);
-      setUser(JSON.parse(storedUser));
+      try {
+        // Decode the JWT payload (middle segment) to read the exp claim.
+        // This is not a security check — the server always verifies the signature.
+        // It's purely to avoid showing the authenticated UI for a split second
+        // before the first API call returns 401 on an expired token.
+        const payloadB64 = storedToken.split('.')[1];
+        const payload    = JSON.parse(atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/')));
+
+        if (payload?.exp && payload.exp * 1000 > Date.now()) {
+          // Token is still valid — restore session
+          setToken(storedToken);
+          setUser(JSON.parse(storedUser));
+        } else {
+          // Token expired — clear storage silently, stay on login page
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+        }
+      } catch {
+        // Malformed token — clear it
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+      }
     }
     setLoading(false);
   }, []);
+
 
   const login = async (email, password) => {
     try {
@@ -33,11 +53,14 @@ export const AuthProvider = ({ children }) => {
       setUser(userData);
       return { success: true };
     } catch (error) {
-      console.error('Login failed:', error);
-      const message = error.response?.data?.error || 'Invalid email or password.';
-      return { success: false, error: message };
+      const status     = error.response?.status;
+      const data       = error.response?.data || {};
+      const message    = data.error || 'Invalid email or password.';
+      const retryAfter = data.retry_after ?? null;
+      return { success: false, status, error: message, retryAfter };
     }
   };
+
 
   const logout = () => {
     localStorage.removeItem('token');
