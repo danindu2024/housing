@@ -8,18 +8,21 @@ class SystemController {
 
     public function migrate(): void {
         header('Content-Type: application/json');
-        
-        $providedKey = $_GET['secret_key'] ?? '';
-        $expectedKey = \App\Config\App::get('MIGRATION_SECRET', 'nhd_default_secure_key_123');
 
-        if (empty($expectedKey) || $providedKey !== $expectedKey) {
+        $providedKey = $_GET['secret_key'] ?? '';
+        // MIGRATION_SECRET must be set in .env — no hardcoded fallback.
+        // If the env variable is missing, all migration requests are rejected.
+        $expectedKey = \App\Config\App::get('MIGRATION_SECRET', '');
+
+        if (empty($expectedKey) || empty($providedKey) || !hash_equals($expectedKey, $providedKey)) {
             http_response_code(403);
             echo json_encode([
-                'status' => 'error',
+                'status'  => 'error',
                 'message' => 'Forbidden: Invalid or missing secret_key.'
             ]);
             return;
         }
+
 
         try {
             $db = Database::getConnection();
