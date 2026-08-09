@@ -36,9 +36,13 @@ const LoginPage = () => {
 
     if (result.success) {
       navigate('/dashboard');
+    } else if (result.status === 429) {
+      const mins = result.retryAfter ? Math.ceil(result.retryAfter / 60) : 15;
+      setError(`Account temporarily locked due to too many failed attempts. Try again in ${mins} minute${mins !== 1 ? 's' : ''}.`);
     } else {
       setError(result.error);
     }
+
   };
 
   return (
@@ -138,7 +142,7 @@ const LoginPage = () => {
                 {submitting ? (
                   <div className="flex items-center gap-2">
                     <div className="w-4 h-4 rounded-full border-2 border-slate-400 border-t-white animate-spin" />
-                    <span>Verifying Credentials...</span>
+                    <span>Verifying Credentials</span>
                   </div>
                 ) : (
                   'Authorize Access'
