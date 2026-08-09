@@ -251,7 +251,7 @@ export default function HouseForm({ villageId, villageCategoryCode, isLoanVillag
           <FormSection title="Beneficiary Details">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div>
-                <FieldLabel required>ප්‍රතිලාභී අංකය / Beneficiary Number</FieldLabel>
+                <FieldLabel required>ප්‍රතිලාභී අංකය/Beneficiary Number</FieldLabel>
                 <input
                   type="text"
                   name="beneficiary_number"
@@ -431,7 +431,7 @@ export default function HouseForm({ villageId, villageCategoryCode, isLoanVillag
                   name="estimated_value"
                   value={formData.estimated_value}
                   onChange={handleChange}
-                  placeholder="රු. 0.00"
+                  placeholder="උදා - 100000.00"
                   className={getInputCls('estimated_value')}
                 />
                 {errors.estimated_value && <p className="text-xs text-rose-500 font-medium mt-1.5">{errors.estimated_value[0]}</p>}
@@ -457,14 +457,14 @@ export default function HouseForm({ villageId, villageCategoryCode, isLoanVillag
             <FormSection title="Loan Details / ණය පිළිබඳ විස්තර">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div>
-                  <FieldLabel>මුළු ණය මුදල (රු.) / Total Loan (LKR)</FieldLabel>
+                  <FieldLabel>මුළු ණය මුදල(රු.) / Total Loan(LKR)</FieldLabel>
                   <input
                     type="number"
                     name="loan_amount"
                     step="0.01"
                     value={formData.loan_amount}
                     onChange={handleChange}
-                    placeholder="රු. 0.00"
+                    placeholder="උදා - 100000.00"
                     className={getInputCls('loan_amount')}
                   />
                   {errors.loan_amount && <p className="text-xs text-rose-500 font-medium mt-1.5">{errors.loan_amount[0]}</p>}
@@ -528,20 +528,20 @@ export default function HouseForm({ villageId, villageCategoryCode, isLoanVillag
                     step="0.01"
                     value={formData.grant_amount}
                     onChange={handleChange}
-                    placeholder="රු. 0.00"
+                    placeholder="උදා - 100000.00"
                     className={getInputCls('grant_amount')}
                   />
                   {errors.grant_amount && <p className="text-xs text-rose-500 font-medium mt-1.5">{errors.grant_amount[0]}</p>}
                 </div>
 
                 <div className="md:col-span-2">
-                  <FieldLabel>දීමනා පිළිබඳ වෙනත් සටහන් / Grant Notes</FieldLabel>
+                  <FieldLabel>දීමනා පිළිබඳ වෙනත් සටහන් / Grant Other Notes</FieldLabel>
                   <textarea
                     rows="2"
                     name="grant_notes"
                     value={formData.grant_notes}
                     onChange={handleChange}
-                    placeholder="දීමනාව සම්බන්ධ වෙනත් සටහන් ඇතුළත් කරන්න..."
+                    placeholder="දීමනාව සම්බන්ධ වෙනත් සටහන්  ඇත්නම් ඇතුළත් කරන්න"
                     className={getInputCls('grant_notes')}
                   />
                   {errors.grant_notes && <p className="text-xs text-rose-500 font-medium mt-1.5">{errors.grant_notes[0]}</p>}
