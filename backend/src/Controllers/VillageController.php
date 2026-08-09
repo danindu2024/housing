@@ -22,171 +22,153 @@ class VillageController {
             $db = Database::getConnection();
             $filters = $_GET;
 
-            $sql = "SELECT v.*, vc.code as category_code, vc.name as category_name,
-                      lob.name_en as ownership_body_name_en, lob.name_si as ownership_body_name_si, lob.name_ta as ownership_body_name_ta, lob.code as ownership_body_code,
-                      dv.name as division_name, d.name as district_name,
-                      dp.code as development_project_code, dp.name_en as development_project_name_en,
-                      dp.name_si as development_project_name_si, dp.name_ta as development_project_name_ta,
-                      (SELECT COUNT(*) FROM house h WHERE h.village_id = v.id) as total_houses_recorded
-                    FROM village v
-                    JOIN village_category vc ON v.category_id = vc.id
-                    LEFT JOIN land_ownership_body lob ON v.ownership_body_id = lob.id
-                    JOIN division dv ON v.division_id = dv.id
-                    JOIN district d ON dv.district_id = d.id
-                    LEFT JOIN development_project dp ON v.development_project_id = dp.id
-                    WHERE 1=1";
-            
+            // Pagination setup
+            $page    = max(1, (int)($filters['page']     ?? 1));
+            $perPage = min(100, (int)($filters['per_page'] ?? 20));
+            $offset  = ($page - 1) * $perPage;
+
+            // ----------------------------------------------------------------
+            // Build WHERE clause + bindings once — no duplication between
+            // count and data queries.
+            // ----------------------------------------------------------------
+            $where    = 'WHERE 1=1';
             $bindings = [];
 
             if (!empty($filters['search'])) {
-                $sql .= " AND v.name LIKE :search";
+                $where .= ' AND v.name LIKE :search';
                 $bindings['search'] = '%' . trim($filters['search']) . '%';
             }
             if (!empty($filters['province'])) {
-                $sql .= " AND d.province = :province";
+                $where .= ' AND d.province = :province';
                 $bindings['province'] = trim($filters['province']);
             }
             if (!empty($filters['district_id']) && is_numeric($filters['district_id'])) {
-                $sql .= " AND d.id = :district_id";
+                $where .= ' AND d.id = :district_id';
                 $bindings['district_id'] = (int)$filters['district_id'];
             }
             if (!empty($filters['division_id']) && is_numeric($filters['division_id'])) {
-                $sql .= " AND v.division_id = :division_id";
+                $where .= ' AND v.division_id = :division_id';
                 $bindings['division_id'] = (int)$filters['division_id'];
             }
             if (!empty($filters['grama_niladhari_division'])) {
-                $sql .= " AND v.grama_niladhari_division LIKE :gn";
+                // Contains search; add an index on village.grama_niladhari_division
+                // for best performance with large datasets.
+                $where .= ' AND v.grama_niladhari_division LIKE :gn';
                 $bindings['gn'] = '%' . trim($filters['grama_niladhari_division']) . '%';
             }
             if (!empty($filters['category'])) {
-                $sql .= " AND vc.code = :category";
+                $where .= ' AND vc.code = :category';
                 $bindings['category'] = $filters['category'];
             }
             if (!empty($filters['status'])) {
                 $statusFilter = strtoupper(trim($filters['status']));
                 if (in_array($statusFilter, ['OPEN', 'CLOSED'])) {
-                    $sql .= " AND v.status = :status";
+                    $where .= ' AND v.status = :status';
                     $bindings['status'] = $statusFilter;
                 }
             }
             if (isset($filters['is_conservation_area']) && $filters['is_conservation_area'] !== '') {
                 if ($filters['is_conservation_area'] === '1' || $filters['is_conservation_area'] === 'true') {
-                    $sql .= " AND v.is_conservation_area <> 'NONE'";
+                    $where .= " AND v.is_conservation_area <> 'NONE'";
                 } elseif ($filters['is_conservation_area'] === '0' || $filters['is_conservation_area'] === 'false') {
-                    $sql .= " AND v.is_conservation_area = 'NONE'";
+                    $where .= " AND v.is_conservation_area = 'NONE'";
                 } else {
-                    $sql .= " AND v.is_conservation_area = :conservation";
+                    $where .= ' AND v.is_conservation_area = :conservation';
                     $bindings['conservation'] = $filters['is_conservation_area'];
                 }
             }
             if (isset($filters['infrastructure_issue']) && $filters['infrastructure_issue'] !== '') {
-                $sql .= " AND JSON_CONTAINS(v.infrastructure_issues, :infra_issue)";
+                $where .= ' AND JSON_CONTAINS(v.infrastructure_issues, :infra_issue)';
                 $bindings['infra_issue'] = '"' . $filters['infrastructure_issue'] . '"';
             }
 
-            $sql .= " ORDER BY v.name";
-
-            // Pagination setup
-            $page = max(1, (int)($filters['page'] ?? 1));
-            $perPage = min(100, (int)($filters['per_page'] ?? 20));
-            $offset = ($page - 1) * $perPage;
-
-            // Total count query helper
-            $countSql = "
-                SELECT COUNT(DISTINCT v.id) 
+            // ----------------------------------------------------------------
+            // Single optimized query:
+            //  - SELECT only columns the list view uses (not SELECT v.*)
+            //  - house_count via LEFT JOIN aggregate, not a correlated subquery
+            //    (the old (SELECT COUNT(*) FROM house ...) ran once per row)
+            //  - COUNT(*) OVER() window function returns the filtered total
+            //    alongside each data row — no separate count query needed
+            // ----------------------------------------------------------------
+            $sql = "
+                SELECT
+                    v.id,
+                    v.name,
+                    v.status,
+                    v.total_planned_houses,
+                    v.grama_niladhari_division,
+                    v.division_id,
+                    v.category_id,
+                    vc.code  AS category_code,
+                    vc.name  AS category_name,
+                    dv.name  AS division_name,
+                    d.name   AS district_name,
+                    COALESCE(hc.house_count, 0) AS total_houses_recorded,
+                    COUNT(*) OVER() AS total_count
                 FROM village v
-                JOIN village_category vc ON v.category_id = vc.id
-                LEFT JOIN land_ownership_body lob ON v.ownership_body_id = lob.id
-                JOIN division dv ON v.division_id = dv.id
-                JOIN district d ON dv.district_id = d.id
-                WHERE 1=1
+                JOIN village_category vc  ON v.category_id  = vc.id
+                JOIN division dv          ON v.division_id  = dv.id
+                JOIN district d           ON dv.district_id = d.id
+                LEFT JOIN (
+                    SELECT village_id, COUNT(*) AS house_count
+                    FROM house
+                    GROUP BY village_id
+                ) hc ON hc.village_id = v.id
+                $where
+                ORDER BY v.name
+                LIMIT :limit OFFSET :offset
             ";
-            
-            if (!empty($filters['search'])) $countSql .= " AND v.name LIKE :search";
-            if (!empty($filters['province'])) $countSql .= " AND d.province = :province";
-            if (!empty($filters['district_id']) && is_numeric($filters['district_id'])) $countSql .= " AND d.id = :district_id";
-            if (!empty($filters['division_id']) && is_numeric($filters['division_id'])) $countSql .= " AND v.division_id = :division_id";
-            if (!empty($filters['grama_niladhari_division'])) $countSql .= " AND v.grama_niladhari_division LIKE :gn";
-            if (!empty($filters['category'])) $countSql .= " AND vc.code = :category";
-            if (!empty($filters['status'])) {
-                $statusFilter = strtoupper(trim($filters['status']));
-                if (in_array($statusFilter, ['OPEN', 'CLOSED'])) {
-                    $countSql .= " AND v.status = :status";
-                }
-            }
-            if (isset($filters['is_conservation_area']) && $filters['is_conservation_area'] !== '') {
-                if ($filters['is_conservation_area'] === '1' || $filters['is_conservation_area'] === 'true') {
-                    $countSql .= " AND v.is_conservation_area <> 'NONE'";
-                } elseif ($filters['is_conservation_area'] === '0' || $filters['is_conservation_area'] === 'false') {
-                    $countSql .= " AND v.is_conservation_area = 'NONE'";
-                } else {
-                    $countSql .= " AND v.is_conservation_area = :conservation";
-                }
-            }
-            if (isset($filters['infrastructure_issue']) && $filters['infrastructure_issue'] !== '') $countSql .= " AND JSON_CONTAINS(v.infrastructure_issues, :infra_issue)";
 
-            $countStmt = $db->prepare($countSql);
-            $countStmt->execute($bindings);
-            $total = (int)$countStmt->fetchColumn();
-
-            // Append limits and offsets
-            $sql .= " LIMIT :limit OFFSET :offset";
             $stmt = $db->prepare($sql);
-
             foreach ($bindings as $key => $val) {
                 $stmt->bindValue(":$key", $val);
             }
-            $stmt->bindValue(':limit', $perPage, \PDO::PARAM_INT);
-            $stmt->bindValue(':offset', $offset, \PDO::PARAM_INT);
+            $stmt->bindValue(':limit',  $perPage, \PDO::PARAM_INT);
+            $stmt->bindValue(':offset', $offset,  \PDO::PARAM_INT);
             $stmt->execute();
-            $villages = $stmt->fetchAll();
+            $rows = $stmt->fetchAll();
 
-            // Cast appropriate SQL string types to types
-            foreach ($villages as &$v) {
-                $v['id'] = (int)$v['id'];
-                $v['division_id'] = (int)$v['division_id'];
-                $v['category_id'] = (int)$v['category_id'];
-                $v['ownership_body_id'] = $v['ownership_body_id'] !== null ? (int)$v['ownership_body_id'] : null;
-                $v['development_project_id'] = $v['development_project_id'] ? (int)$v['development_project_id'] : null;
-                $v['total_planned_houses'] = (int)$v['total_planned_houses'];
-                $v['total_houses_recorded'] = (int)$v['total_houses_recorded'];
-                $v['is_conservation_area'] = $v['is_conservation_area'];
-                $v['infrastructure_issues'] = !empty($v['infrastructure_issues']) ? json_decode($v['infrastructure_issues'], true) : [];
-                
-                $v['category'] = [
-                    'id' => (int)$v['category_id'],
-                    'code' => $v['category_code'],
-                    'name' => $v['category_name']
+            // Extract total from the window function column (same on every row)
+            $total = !empty($rows) ? (int)$rows[0]['total_count'] : 0;
+
+            // Cast types and shape rows for the API response
+            $villages = [];
+            foreach ($rows as $v) {
+                $villages[] = [
+                    'id'                       => (int)$v['id'],
+                    'name'                     => $v['name'],
+                    'status'                   => $v['status'],
+                    'total_planned_houses'     => (int)$v['total_planned_houses'],
+                    'total_houses_recorded'    => (int)$v['total_houses_recorded'],
+                    'grama_niladhari_division' => $v['grama_niladhari_division'],
+                    'division_id'              => (int)$v['division_id'],
+                    'category_id'              => (int)$v['category_id'],
+                    'category_code'            => $v['category_code'],
+                    'category_name'            => $v['category_name'],
+                    'division_name'            => $v['division_name'],
+                    'district_name'            => $v['district_name'],
+                    // Nested shapes kept for frontend backward-compatibility
+                    'category' => [
+                        'id'   => (int)$v['category_id'],
+                        'code' => $v['category_code'],
+                        'name' => $v['category_name'],
+                    ],
+                    'division' => [
+                        'id'       => (int)$v['division_id'],
+                        'name'     => $v['division_name'],
+                        'district' => $v['district_name'],
+                    ],
                 ];
-                $v['ownership_body'] = $v['ownership_body_id'] ? [
-                    'id' => (int)$v['ownership_body_id'],
-                    'code' => $v['ownership_body_code'],
-                    'name_en' => $v['ownership_body_name_en'],
-                    'name_si' => $v['ownership_body_name_si'],
-                    'name_ta' => $v['ownership_body_name_ta']
-                ] : null;
-                $v['division'] = [
-                    'id' => (int)$v['division_id'],
-                    'name' => $v['division_name'],
-                    'district' => $v['district_name']
-                ];
-                $v['development_project'] = $v['development_project_id'] ? [
-                    'id' => $v['development_project_id'],
-                    'code' => $v['development_project_code'],
-                    'name_en' => $v['development_project_name_en'],
-                    'name_si' => $v['development_project_name_si'],
-                    'name_ta' => $v['development_project_name_ta']
-                ] : null;
             }
 
             http_response_code(200);
             echo json_encode([
                 'data' => $villages,
                 'meta' => [
-                    'total' => $total,
-                    'page' => $page,
-                    'per_page' => $perPage,
-                    'last_page' => (int)ceil($total / $perPage),
+                    'total'     => $total,
+                    'page'      => $page,
+                    'per_page'  => $perPage,
+                    'last_page' => $total > 0 ? (int)ceil($total / $perPage) : 1,
                 ]
             ]);
 
@@ -195,6 +177,7 @@ class VillageController {
             echo json_encode(['error' => 'An internal database error occurred: ' . $e->getMessage()]);
         }
     }
+
 
     public function show(array $params): void {
         $id = (int)$params['id'];
@@ -233,36 +216,15 @@ class VillageController {
             $village['infrastructure_issues'] = !empty($village['infrastructure_issues']) ? json_decode($village['infrastructure_issues'], true) : [];
             $village['development_project_id'] = $village['development_project_id'] ? (int)$village['development_project_id'] : null;
 
-            // Fetch metrics
-            $totalHouses = (int)$db->query("SELECT COUNT(*) FROM house WHERE village_id = $id")->fetchColumn();
-            
-            $fullyDeveloped = (int)$db->query("
-                SELECT COUNT(*) FROM house h 
-                JOIN construction_stage cs ON h.construction_stage_id = cs.id 
-                WHERE h.village_id = $id AND cs.code = 'FULLY_DEVELOPED'
-            ")->fetchColumn();
-
-            $notStarted = (int)$db->query("
-                SELECT COUNT(*) FROM house h 
-                JOIN construction_stage cs ON h.construction_stage_id = cs.id 
-                WHERE h.village_id = $id AND cs.code = 'NO_FOUNDATION'
-            ")->fetchColumn();
-
-            $underConstruction = $totalHouses - $fullyDeveloped - $notStarted;
-
-            $landSold = (int)$db->query("SELECT COUNT(*) FROM house WHERE village_id = $id AND is_land_sold = 1")->fetchColumn();
-            $houseSold = (int)$db->query("SELECT COUNT(*) FROM house WHERE village_id = $id AND is_house_sold = 1")->fetchColumn();
-            $openIssues = (int)$db->query("SELECT COUNT(*) FROM issue_report WHERE village_id = $id AND status = 'OPEN'")->fetchColumn();
+            // Only total_houses is used by the frontend (delete-guard modal).
+            // A simple COUNT is faster than a JOIN-aggregate for this purpose.
+            $countStmt = $db->prepare("SELECT COUNT(*) FROM house WHERE village_id = :id");
+            $countStmt->execute([':id' => $id]);
 
             $village['summary'] = [
-                'total_houses' => $totalHouses,
-                'fully_developed' => $fullyDeveloped,
-                'under_construction' => $underConstruction,
-                'not_started' => $notStarted,
-                'land_sold_count' => $landSold,
-                'house_sold_count' => $houseSold,
-                'open_issues' => $openIssues
+                'total_houses' => (int)$countStmt->fetchColumn(),
             ];
+
 
             http_response_code(200);
             echo json_encode($village);
@@ -272,6 +234,7 @@ class VillageController {
             echo json_encode(['error' => 'Database error loading village: ' . $e->getMessage()]);
         }
     }
+
 
     public function store(array $params): void {
         $body = json_decode(file_get_contents('php://input'), true);
@@ -284,8 +247,6 @@ class VillageController {
 
         $body = $this->sanitizeInput($body);
 
-
-
         $errors = VillageValidator::validate($body);
 
         if (!empty($errors)) {
@@ -296,129 +257,72 @@ class VillageController {
 
         try {
             $db = Database::getConnection();
-            
-            $divisionId = !empty($body['division_id']) ? (int)$body['division_id'] : null;
-            if (!$divisionId) {
-                $divStmt = $db->query("SELECT id FROM division LIMIT 1");
-                $divisionId = (int)$divStmt->fetchColumn() ?: 1;
-            }
 
-            $name = !empty($body['name']) ? trim($body['name']) : 'Draft Village';
+            $divisionId  = (int)$body['division_id'];
+            $categoryId  = (int)$body['category_id'];
+            $name        = trim($body['name']);
 
-            // Natural Key Duplicate Checking
-            $dupStmt = $db->prepare("SELECT * FROM village WHERE LOWER(name) = LOWER(:name) AND division_id = :division_id");
-            $dupStmt->execute([
-                ':name' => $name,
-                ':division_id' => $divisionId
-            ]);
+            // Natural key duplicate check: same name + same DS Division = duplicate
+            $dupStmt = $db->prepare(
+                "SELECT id, name, status FROM village WHERE LOWER(name) = LOWER(:name) AND division_id = :division_id"
+            );
+            $dupStmt->execute([':name' => $name, ':division_id' => $divisionId]);
             $existing = $dupStmt->fetch();
 
             if ($existing) {
-                $existingStatus = $existing['status'];
-                if ($existingStatus === 'INCOMPLETE' || empty($existingStatus)) {
-                    // Enrich existing draft village
-                    $updateFields = [];
-                    $updateBindings = [':id' => $existing['id']];
-
-                    $fields = [
-                        'category_id', 'ownership_body_id', 'development_project_id',
-                        'grama_niladhari_division', 'total_planned_houses', 'status',
-                        'is_conservation_area', 'infrastructure_issues', 'boundary_type',
-                        'program_start_date', 'notes', 'google_map_link'
-                    ];
-
-                    foreach ($fields as $field) {
-                        if (isset($body[$field]) && $body[$field] !== '' && $body[$field] !== null) {
-                            $val = $body[$field];
-                            if ($field === 'category_id' || $field === 'ownership_body_id' || $field === 'development_project_id') {
-                                $val = $val ? (int)$val : null;
-                            } elseif ($field === 'total_planned_houses') {
-                                $val = (int)$val;
-                            } elseif ($field === 'is_conservation_area') {
-                                $val = $val ?: 'NONE';
-                            } elseif ($field === 'infrastructure_issues' && is_array($val)) {
-                                $val = json_encode($val);
-                            } elseif ($field === 'status') {
-                                $val = in_array(strtoupper(trim($val)), ['YES', 'OPEN']) ? 'OPEN' : 'CLOSED';
-                            }
-                            $updateFields[] = "`$field` = :$field";
-                            $updateBindings[":$field"] = $val;
-                        }
-                    }
-
-                    if (!empty($updateFields)) {
-                        $updateSql = "UPDATE village SET " . implode(', ', $updateFields) . " WHERE id = :id";
-                        $upStmt = $db->prepare($updateSql);
-                        $upStmt->execute($updateBindings);
-                    }
-
-                    http_response_code(200);
-                    echo json_encode([
-                        'id' => (int)$existing['id'],
-                        'merged' => true,
-                        'message' => 'Existing draft village enriched successfully.'
-                    ]);
-                    return;
-                } else {
-                    // Block overwrite on active/finalized records
-                    http_response_code(409);
-                    echo json_encode([
-                        'error' => 'A finalized village with this name already exists in this division.',
-                        'details' => [
-                            'name' => ['A village with this name already exists in this Divisional Secretariat division.']
-                        ],
-                        'existing' => [
-                            'id' => (int)$existing['id'],
-                            'name' => $existing['name'],
-                            'status' => $existing['status']
-                        ]
-                    ]);
-                    return;
-                }
+                http_response_code(409);
+                echo json_encode([
+                    'error'   => 'A village with this name already exists in this Divisional Secretariat division.',
+                    'details' => [
+                        'name' => ['A village with this name already exists in this DS Division.']
+                    ],
+                    'existing' => [
+                        'id'     => (int)$existing['id'],
+                        'name'   => $existing['name'],
+                        'status' => $existing['status'],
+                    ]
+                ]);
+                return;
             }
 
-            // Otherwise, proceed to insert a new village
             $stmt = $db->prepare("
-                INSERT INTO village (division_id, category_id, ownership_body_id, name,
-                  development_project_id, grama_niladhari_division, total_planned_houses,
-                  status, is_conservation_area, infrastructure_issues, boundary_type,
-                  program_start_date, notes, google_map_link)
-                VALUES (:division_id, :category_id, :ownership_body_id, :name,
-                  :project_id, :gn_div, :total_planned,
-                  :status, :conservation, :infra_issues, :boundary_type, :start_date, :notes, :google_map_link)
+                INSERT INTO village (
+                    division_id, category_id, ownership_body_id, name,
+                    development_project_id, grama_niladhari_division, total_planned_houses,
+                    status, is_conservation_area, infrastructure_issues, boundary_type,
+                    program_start_date, notes, google_map_link
+                ) VALUES (
+                    :division_id, :category_id, :ownership_body_id, :name,
+                    :project_id, :gn_div, :total_planned,
+                    :status, :conservation, :infra_issues, :boundary_type,
+                    :start_date, :notes, :google_map_link
+                )
             ");
 
-            $categoryId = !empty($body['category_id']) ? (int)$body['category_id'] : null;
-            if (!$categoryId) {
-                $catStmt = $db->query("SELECT id FROM village_category LIMIT 1");
-                $categoryId = (int)$catStmt->fetchColumn() ?: 1;
-            }
-
-            $ownershipBodyId = !empty($body['ownership_body_id']) ? (int)$body['ownership_body_id'] : null;
-
             $stmt->execute([
-                'division_id'    => $divisionId,
-                'category_id'    => $categoryId,
-                'ownership_body_id' => $ownershipBodyId,
-                'name'           => $name,
-                'project_id'     => !empty($body['development_project_id']) ? (int)$body['development_project_id'] : null,
-                'gn_div'         => !empty($body['grama_niladhari_division']) ? trim($body['grama_niladhari_division']) : null,
-                'total_planned'  => isset($body['total_planned_houses']) && $body['total_planned_houses'] !== '' ? (int)$body['total_planned_houses'] : 0,
-                'status'         => !empty($body['status']) ? (in_array(strtoupper(trim($body['status'])), ['YES', 'OPEN']) ? 'OPEN' : 'CLOSED') : null,
-                'conservation'   => !empty($body['is_conservation_area']) ? $body['is_conservation_area'] : 'NONE',
-                'infra_issues'   => (isset($body['infrastructure_issues']) && is_array($body['infrastructure_issues'])) ? json_encode($body['infrastructure_issues']) : null,
-                'boundary_type'  => !empty($body['boundary_type']) ? $body['boundary_type'] : null,
-                'start_date'     => !empty($body['program_start_date']) ? $body['program_start_date'] : null,
-                'notes'          => !empty($body['notes']) ? trim($body['notes']) : null,
-                'google_map_link'=> !empty($body['google_map_link']) ? trim($body['google_map_link']) : null,
+                'division_id'      => $divisionId,
+                'category_id'      => $categoryId,
+                'ownership_body_id'=> !empty($body['ownership_body_id'])     ? (int)$body['ownership_body_id']     : null,
+                'name'             => $name,
+                'project_id'       => !empty($body['development_project_id']) ? (int)$body['development_project_id'] : null,
+                'gn_div'           => !empty($body['grama_niladhari_division']) ? trim($body['grama_niladhari_division']) : null,
+                'total_planned'    => (int)$body['total_planned_houses'],
+                'status'           => !empty($body['status']) ? strtoupper(trim($body['status'])) : null,
+                'conservation'     => !empty($body['is_conservation_area'])   ? $body['is_conservation_area']   : 'NONE',
+                'infra_issues'     => !empty($body['infrastructure_issues']) && is_array($body['infrastructure_issues'])
+                                        ? json_encode($body['infrastructure_issues']) : null,
+                'boundary_type'    => !empty($body['boundary_type'])          ? $body['boundary_type']           : null,
+                'start_date'       => !empty($body['program_start_date'])     ? $body['program_start_date']      : null,
+                'notes'            => !empty($body['notes'])                  ? trim($body['notes'])             : null,
+                'google_map_link'  => !empty($body['google_map_link'])        ? trim($body['google_map_link'])   : null,
             ]);
 
             $id = $db->lastInsertId();
-            
+
             http_response_code(201);
             echo json_encode([
-                'id' => (int)$id, 
-                'message' => 'Village record initialized successfully.'
+                'id'      => (int)$id,
+                'message' => 'Village record registered successfully.'
             ]);
 
         } catch (\PDOException $e) {
@@ -426,6 +330,7 @@ class VillageController {
             echo json_encode(['error' => 'Failed to write village record: ' . $e->getMessage()]);
         }
     }
+
 
     public function bulkStore(array $params): void {
         $body = json_decode(file_get_contents('php://input'), true);
