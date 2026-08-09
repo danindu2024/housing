@@ -140,11 +140,13 @@ const VillageDetailPage = () => {
   const getBoundaryTypeDisplay = (boundary) => {
     const boundaries = {
       MUNICIPAL: 'මහනගර සභා (Municipal Council)',
-      URBAN: 'නගර සභා (Urban Council)',
-      PRADESHIYA_SABHA: 'ප්‍රාදේශීය සභා (Pradeshiya Sabha)',
+      URBAN:     'නගරසභා (Urban Council)',
+      DS:        'ප්‍රාදේශීය සභා (DS Division)',
+      VILLAGE:   'දුෂ්කර ගම්මාන (Village)',
     };
     return boundaries[boundary] || boundary || 'සටහන් කර නැත (Not Specified)';
   };
+
 
   const getInfrastructureBadges = (infraArray) => {
     if (!infraArray || !Array.isArray(infraArray) || infraArray.length === 0) {
@@ -449,12 +451,12 @@ const VillageDetailPage = () => {
                       <td className="px-6 py-4">{getOccupancyBadge(h.occupancy_status)}</td>
                       {isLoanVillage && (
                         <td className="px-6 py-4 text-center">
-                          {h.has_loan ? (
-                            <span className="px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 text-[10px] font-bold border border-indigo-100">
-                              LKR Active
+                          {h.loan_amount && h.loan_amount > 0 ? (
+                            <span className="font-semibold text-slate-800">
+                              රු. {parseFloat(h.loan_amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </span>
                           ) : (
-                            <span className="text-slate-400 text-xs">-</span>
+                            <span className="text-slate-400 text-xs font-semibold">-</span>
                           )}
                         </td>
                       )}

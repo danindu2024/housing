@@ -13,12 +13,17 @@ class HouseController {
         try {
             $db = Database::getConnection();
 
+            // has_loan is derived from loan_amount (non-null after LEFT JOIN = loan exists).
+            // No correlated subquery needed — the LEFT JOIN already gives us this info.
             $sql = "SELECT h.*, cs.code as stage_code, cs.label as stage_label,
-                      (SELECT COUNT(*) FROM loan l WHERE l.house_id = h.id) as has_loan
+                      l.loan_amount,
+                      gd.grant_amount
                     FROM house h
                     JOIN construction_stage cs ON h.construction_stage_id = cs.id
+                    LEFT JOIN loan l ON h.id = l.house_id
+                    LEFT JOIN grant_detail gd ON h.id = gd.house_id
                     WHERE h.village_id = :village_id";
-            
+
             $bindings = [':village_id' => $villageId];
 
             if (!empty($filters['stage_code'])) {
@@ -53,14 +58,18 @@ class HouseController {
                 $h['is_land_sold'] = (bool)$h['is_land_sold'];
                 $h['is_house_sold'] = (bool)$h['is_house_sold'];
                 $h['has_infrastructure_issues'] = (bool)$h['has_infrastructure_issues'];
-                $h['has_loan'] = (int)$h['has_loan'] > 0;
+                // Derived from LEFT JOIN: non-null loan_amount means a loan record exists
+                $h['has_loan'] = $h['loan_amount'] !== null;
+                $h['loan_amount'] = $h['loan_amount'] !== null ? (float)$h['loan_amount'] : null;
+                $h['grant_amount'] = $h['grant_amount'] !== null ? (float)$h['grant_amount'] : null;
 
                 $h['construction_stage'] = [
-                    'id' => $h['construction_stage_id'],
-                    'code' => $h['stage_code'],
-                    'label' => $h['stage_label']
+                    'id'    => $h['construction_stage_id'],
+                    'code'  => $h['stage_code'],
+                    'label' => $h['stage_label'],
                 ];
             }
+
 
             http_response_code(200);
             echo json_encode(['data' => $houses]);
@@ -178,20 +187,7 @@ class HouseController {
                 }
             }
 
-            // Check if NIC is unique globally (only if provided)
             $ownerNic = !empty($body['owner_nic']) ? trim($body['owner_nic']) : null;
-            if ($ownerNic !== null) {
-                $dupNicStmt = $db->prepare("SELECT COUNT(*) FROM house WHERE owner_nic = :owner_nic");
-                $dupNicStmt->execute([':owner_nic' => $ownerNic]);
-                if ((int)$dupNicStmt->fetchColumn() > 0) {
-                    http_response_code(400);
-                    echo json_encode([
-                        'error' => 'Validation failed',
-                        'details' => ['owner_nic' => ['National Identity Card (NIC) number is already registered to another house.']]
-                    ]);
-                    return;
-                }
-            }
 
             // Insert house record
             $stmt = $db->prepare("

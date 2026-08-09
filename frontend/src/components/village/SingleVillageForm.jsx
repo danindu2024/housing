@@ -319,10 +319,44 @@ const SingleVillageForm = ({ isEditMode: propIsEditMode }) => {
     setGnSearchFocus(false);
   };
 
+  // Client-side pre-validation: checks required fields before making any API call.
+  // Mirrors the backend VillageValidator rules so the user gets instant feedback.
+  const clientValidate = () => {
+    const errs = {};
+    if (!formData.name.trim()) {
+      errs.name = ['Village name (ගම්මානයේ නම) is required.'];
+    } else if (formData.name.trim().length < 3) {
+      errs.name = ['Village name must be at least 3 characters.'];
+    }
+    if (!formData.division_id) {
+      errs.division_id = ['A Divisional Secretariat (DS) Division must be selected.'];
+    }
+    if (!formData.category_id) {
+      errs.category_id = ['A funding method (category) must be selected.'];
+    }
+    if (formData.total_planned_houses === '' || formData.total_planned_houses === null) {
+      errs.total_planned_houses = ['Total planned houses count is required.'];
+    } else if (Number(formData.total_planned_houses) < 0) {
+      errs.total_planned_houses = ['Planned houses must be a non-negative number.'];
+    }
+    return errs;
+  };
+
   // 7. Form submission with status override (no redirection, stays on page)
   const handleSubmitWithStatus = async (statusOverride) => {
-    setErrors({});
     setSuccessMsg('');
+
+    // Run client-side validation first — avoids a network round-trip on obvious errors
+    const clientErrors = clientValidate();
+    if (Object.keys(clientErrors).length > 0) {
+      setErrors(clientErrors);
+      setTimeout(() => {
+        bannerRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
+      return;
+    }
+
+    setErrors({});
     setSubmitting(true);
 
     const trimmedFormData = {};
@@ -352,11 +386,7 @@ const SingleVillageForm = ({ isEditMode: propIsEditMode }) => {
         }, 1200);
       } else {
         response = await api.post('/villages', payload);
-        if (response.data.merged) {
-          setSuccessMsg('පවතින ගම්මාන තොරතුරු සාර්ථකව යාවත්කාලීන කරන ලදී! (Existing village record updated successfully!)');
-        } else {
-          setSuccessMsg('ගම්මානය සාර්ථකව ලියාපදිංචි කරන ලදී! (Village registered successfully!)');
-        }
+        setSuccessMsg('ගම්මානය සාර්ථකව ලියාපදිංචි කරන ලදී! (Village registered successfully!)');
         // Smooth scroll to bottom banner for new village registration
         setTimeout(() => {
           bannerRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -387,9 +417,12 @@ const SingleVillageForm = ({ isEditMode: propIsEditMode }) => {
     }
   };
 
+  // Pressing Enter inside the form triggers the native submit event.
+  // Default status to 'CLOSED' if the user hasn't selected one yet,
+  // so we never submit a null/empty status by accident.
   const handleNativeSubmit = (e) => {
     e.preventDefault();
-    handleSubmitWithStatus(formData.status);
+    handleSubmitWithStatus(formData.status || 'CLOSED');
   };
 
   if (loadingVillage) {

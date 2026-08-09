@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 
@@ -8,12 +8,16 @@ const VillageListPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // Filtering states
+  // Filtering states — debounced values sent to API
   const [searchTerm, setSearchTerm] = useState('');
   const [province, setProvince] = useState('');
   const [districtId, setDistrictId] = useState('');
   const [divisionId, setDivisionId] = useState('');
   const [gnDivision, setGnDivision] = useState('');
+
+  // Raw input values — updated on every keystroke, debounced before hitting API
+  const [searchInput, setSearchInput] = useState('');
+  const [gnInput, setGnInput] = useState('');
 
   // Lookup reference & cascading dropdown lists
   const [districtsTree, setDistrictsTree] = useState([]);
@@ -41,36 +45,63 @@ const VillageListPage = () => {
     fetchReferences();
   }, []);
 
-  const fetchVillages = async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const params = {
-        page,
-        per_page: 10,
-      };
-
-      if (searchTerm.trim()) params.search = searchTerm.trim();
-      if (province) params.province = province;
-      if (districtId) params.district_id = districtId;
-      if (divisionId) params.division_id = divisionId;
-      if (gnDivision.trim()) params.grama_niladhari_division = gnDivision.trim();
-
-      const response = await api.get('/villages', { params });
-      setVillages(response.data.data);
-      setTotalPages(response.data.meta.last_page);
-      setTotalRecords(response.data.meta.total);
-    } catch (err) {
-      console.error('Failed to load villages directory:', err);
-      setError('An error occurred while loading the village directory registry.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Debounce: commit search input to actual filter state after 400ms idle
   useEffect(() => {
-    fetchVillages();
-  }, [page, searchTerm, province, districtId, divisionId, gnDivision]);
+    const timer = setTimeout(() => {
+      setSearchTerm(searchInput);
+      setPage(1);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  // Debounce: commit GN division input after 400ms idle
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setGnDivision(gnInput);
+      setPage(1);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [gnInput]);
+
+  // Stable fetch function — AbortController cancels any in-flight request
+  // when filters change before the previous one finishes, preventing stale data
+  const fetchVillages = useCallback(
+    async (signal) => {
+      setLoading(true);
+      setError('');
+      try {
+        const params = {
+          page,
+          per_page: 10,
+        };
+
+        if (searchTerm.trim()) params.search = searchTerm.trim();
+        if (province) params.province = province;
+        if (districtId) params.district_id = districtId;
+        if (divisionId) params.division_id = divisionId;
+        if (gnDivision.trim()) params.grama_niladhari_division = gnDivision.trim();
+
+        const response = await api.get('/villages', { params, signal });
+        setVillages(response.data.data);
+        setTotalPages(response.data.meta.last_page);
+        setTotalRecords(response.data.meta.total);
+      } catch (err) {
+        if (err.name === 'CanceledError' || err.name === 'AbortError') return; // stale request cancelled
+        console.error('Failed to load villages directory:', err);
+        setError('An error occurred while loading the village directory registry.');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [page, searchTerm, province, districtId, divisionId, gnDivision]
+  );
+
+  // Re-fetch whenever stable filter values change; cancel previous in-flight request
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchVillages(controller.signal);
+    return () => controller.abort();
+  }, [fetchVillages]);
 
   // Cascading Location Handlers
   const handleProvinceChange = (e) => {
@@ -159,13 +190,15 @@ const VillageListPage = () => {
     return { nameSi, nameEn, style };
   };
 
-  // Handle filter resets
+  // Handle filter resets — also clear raw input states so UI reflects the reset
   const resetFilters = () => {
+    setSearchInput('');
     setSearchTerm('');
+    setGnInput('');
+    setGnDivision('');
     setProvince('');
     setDistrictId('');
     setDivisionId('');
-    setGnDivision('');
     setDistricts([]);
     setDivisions([]);
     setPage(1);
@@ -223,19 +256,13 @@ const VillageListPage = () => {
           <input
             type="text"
             placeholder="ගම්මානයේ නම අනුව සොයන්න / Search by Village Name"
-            value={searchTerm}
-            onChange={(e) => {
-              setSearchTerm(e.target.value);
-              setPage(1);
-            }}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
             className="w-full pl-11 pr-10 py-3 rounded-xl border border-slate-300 bg-slate-50/80 text-sm font-semibold text-slate-800 placeholder-slate-500 placeholder:font-semibold focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-sm"
           />
-          {searchTerm && (
+          {searchInput && (
             <button
-              onClick={() => {
-                setSearchTerm('');
-                setPage(1);
-              }}
+              onClick={() => setSearchInput('')}
               className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
               aria-label="Clear search"
             >
@@ -308,14 +335,14 @@ const VillageListPage = () => {
             <input
               type="text"
               placeholder="ග්‍රාමනිළධාරී කොට්ඨාශය (GN Division)"
-              value={gnDivision}
-              onChange={handleGnChange}
+              value={gnInput}
+              onChange={(e) => setGnInput(e.target.value)}
               className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-medium text-slate-700 bg-slate-50 placeholder-slate-400 focus:bg-white focus:ring-indigo-500 focus:border-indigo-500 transition-all"
             />
           </div>
         </div>
 
-        {(searchTerm || province || districtId || divisionId || gnDivision) && (
+        {(searchInput || province || districtId || divisionId || gnInput) && (
           <div className="mt-4 pt-4 border-t border-slate-100 flex justify-end">
             <button
               onClick={resetFilters}
