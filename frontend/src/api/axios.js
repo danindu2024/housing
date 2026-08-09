@@ -18,12 +18,19 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (res) => res,
   (error) => {
-    if (error.response?.status === 401) {
+    const status = error.response?.status;
+    const isLoginEndpoint = error.config?.url?.includes('/auth/login');
+
+    // 401 on any non-login request = session expired → redirect to login
+    if (status === 401 && !isLoginEndpoint) {
       localStorage.removeItem('token');
+      localStorage.removeItem('user');
       window.location.href = '/login';
     }
+    // 429 (rate-limited) passes through to the caller (LoginPage handles the message)
     return Promise.reject(error);
   }
 );
+
 
 export default api;
