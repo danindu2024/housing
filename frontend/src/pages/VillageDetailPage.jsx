@@ -315,12 +315,16 @@ const VillageDetailPage = () => {
             </span>
             <div>
               {village.status === 'OPEN' ? (
-                <p className="text-xs font-bold text-slate-800">
+                <p className="text-xs font-bold text-slate-800 uppercase tracking-wider">
                   විවෘතයි (Open)
                 </p>
-              ) : (
-                <p className="text-xs font-bold text-slate-800">
+              ) : village.status === 'CLOSED' ? (
+                <p className="text-xs font-bold text-slate-800 uppercase tracking-wider">
                   විවෘත කර නැත (Closed)
+                </p>
+              ) : (
+                <p className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                  සටහන් කර නැත (N/A)
                 </p>
               )}
             </div>
@@ -372,9 +376,8 @@ const VillageDetailPage = () => {
       {/* Village summary Metrics Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-1">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Recorded Houses</span>
+          <span className="text-[12px] font-bold text-slate-800 uppercase tracking-wider block">Recorded Houses</span>
           <p className="text-2xl font-black text-slate-800">{village.summary.total_houses} / {village.total_planned_houses}</p>
-          <span className="text-[10px] text-slate-500 font-medium block">Allotment registration</span>
         </div>
       </div>
 
@@ -463,7 +466,7 @@ const VillageDetailPage = () => {
                       <td className="px-6 py-4 text-right">
                         <button
                           type="button"
-                          onClick={() => {/* View house feature to be implemented later */}}
+                          onClick={() => navigate(`/houses/${h.id}`)}
                           className="inline-flex items-center gap-1.5 px-4 py-2 border border-slate-200 hover:border-indigo-200 text-xs font-bold text-indigo-650 hover:text-white bg-slate-50/50 hover:bg-indigo-600 rounded-xl transition-all shadow-sm active:scale-95"
                         >
                           <span>View House</span>

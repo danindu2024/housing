@@ -37,6 +37,7 @@ $router->get('/api/v1/houses/{id}', [HouseController::class, 'show'], [AuthMiddl
 $router->post('/api/v1/houses/bulk', [HouseController::class, 'globalBulkStore'], [AuthMiddleware::class]);
 
 $router->put('/api/v1/houses/{id}', [HouseController::class, 'update'], [AuthMiddleware::class]);
+$router->delete('/api/v1/houses/{id}', [HouseController::class, 'destroy'], [AuthMiddleware::class]);
 
 // --- Loans & Grants Management (Protected) ---
 $router->get('/api/v1/houses/{house_id}/loan', [LoanController::class, 'show'], [AuthMiddleware::class]);
@@ -46,10 +47,7 @@ $router->post('/api/v1/houses/{house_id}/grant', [LoanController::class, 'storeG
 $router->post('/api/v1/loans/bulk', [LoanController::class, 'bulkStore'], [AuthMiddleware::class]);
 $router->post('/api/v1/grants/bulk', [LoanController::class, 'bulkGrantStore'], [AuthMiddleware::class]);
 
-// --- Officers Management (Protected) ---
-$router->get('/api/v1/officers', [\App\Controllers\OfficerController::class, 'index'], [AuthMiddleware::class]);
-$router->post('/api/v1/officers', [\App\Controllers\OfficerController::class, 'store'], [AuthMiddleware::class]);
-$router->post('/api/v1/officers/bulk', [\App\Controllers\OfficerController::class, 'bulkStore'], [AuthMiddleware::class]);
+
 
 // --- Loan Payments Ledger (Protected) ---
 $router->get('/api/v1/loans/{loan_id}/payments', [LoanPaymentController::class, 'index'], [AuthMiddleware::class]);

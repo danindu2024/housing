@@ -13,8 +13,9 @@ import VillageDetailPage from './pages/VillageDetailPage';
 import DashboardPage from './pages/DashboardPage';
 import VillageForm from './components/village/VillageForm';
 import SingleVillageForm from './components/village/SingleVillageForm';
-import LoanForm from './components/loan/LoanForm';
+
 import HouseRegistrationPage from './pages/HouseRegistrationPage';
+import HouseDetailPage from './pages/HouseDetailPage';
 
 
 // Global Layout Wrapper for Authenticated Pages
@@ -110,26 +111,26 @@ function App() {
               </AppLayout>
             }
           />
+          <Route
+            path="/houses/:id"
+            element={
+              <AppLayout title="නිවාස තොරතුරු - House Details">
+                <HouseDetailPage />
+              </AppLayout>
+            }
+          />
+          <Route
+            path="/houses/:id/edit"
+            element={
+              <AppLayout title="නිවාස තොරතුරු සංස්කරණය - Edit House">
+                <HouseRegistrationPage isEditMode={true} />
+              </AppLayout>
+            }
+          />
 
           {/* House registration is done from inside a Village record — no standalone route */}
           <Route path="/houses/new" element={<Navigate to="/villages" replace />} />
 
-          <Route
-            path="/loans/new"
-            element={
-              <AppLayout title="ණය / ආටාර ලේකනය - Loan & Grant">
-                <LoanForm />
-              </AppLayout>
-            }
-          />
-          <Route
-            path="/officers/new"
-            element={
-              <AppLayout title="නිලධාරී ලේකනය - Officers Registry">
-                <LoanForm />
-              </AppLayout>
-            }
-          />
 
           {/* Catch-all Routing */}
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

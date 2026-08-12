@@ -418,11 +418,9 @@ const SingleVillageForm = ({ isEditMode: propIsEditMode }) => {
   };
 
   // Pressing Enter inside the form triggers the native submit event.
-  // Default status to 'CLOSED' if the user hasn't selected one yet,
-  // so we never submit a null/empty status by accident.
   const handleNativeSubmit = (e) => {
     e.preventDefault();
-    handleSubmitWithStatus(formData.status || 'CLOSED');
+    handleSubmitWithStatus(formData.status || null);
   };
 
   if (loadingVillage) {
@@ -746,8 +744,8 @@ const SingleVillageForm = ({ isEditMode: propIsEditMode }) => {
                   }`}
                 >
                   <option value="">-- තෝරන්න --</option>
-                  <option value="CLOSED">විවෘත නොවේ (No)</option>
                   <option value="OPEN">විවෘතයි (Yes)</option>
+                  <option value="CLOSED">විවෘත නොවේ (No)</option>
                 </select>
                 {errors.status && <p className="text-xs text-rose-500 font-medium mt-1.5">{errors.status[0]}</p>}
               </div>
@@ -827,7 +825,7 @@ const SingleVillageForm = ({ isEditMode: propIsEditMode }) => {
         <div className="p-8 border-t border-slate-100 bg-slate-50/30 flex justify-end gap-4">
           <button
             type="button"
-            onClick={() => navigate('/villages')}
+            onClick={() => navigate(isEditMode && id ? `/villages/${id}` : '/villages')}
             className="px-6 py-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50 hover:text-slate-800 transition-colors"
           >
             Cancel

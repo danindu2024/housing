@@ -307,7 +307,7 @@ class VillageController {
                 'project_id'       => !empty($body['development_project_id']) ? (int)$body['development_project_id'] : null,
                 'gn_div'           => !empty($body['grama_niladhari_division']) ? trim($body['grama_niladhari_division']) : null,
                 'total_planned'    => (int)$body['total_planned_houses'],
-                'status'           => !empty($body['status']) ? strtoupper(trim($body['status'])) : null,
+                'status'           => !empty($body['status']) && in_array(strtoupper(trim($body['status'])), ['YES', 'NO', 'OPEN', 'CLOSED']) ? (in_array(strtoupper(trim($body['status'])), ['YES', 'OPEN']) ? 'OPEN' : 'CLOSED') : null,
                 'conservation'     => !empty($body['is_conservation_area'])   ? $body['is_conservation_area']   : 'NONE',
                 'infra_issues'     => !empty($body['infrastructure_issues']) && is_array($body['infrastructure_issues'])
                                         ? json_encode($body['infrastructure_issues']) : null,
@@ -347,100 +347,99 @@ class VillageController {
             $db = Database::getConnection();
             $validationErrors = [];
             $validatedRows = [];
+            $seenInBatch = []; // Track names seen within this upload to catch within-batch duplicates
 
             foreach ($body as $index => $row) {
                 $rowErrors = [];
                 $displayRowIndex = $index + 1; // 1-indexed for the user Excel rows
 
-                // 1. Validate name (Mandatory for all states)
+                // 1. Mandatory text checks
                 $name = isset($row['name']) ? trim($row['name']) : '';
-                if ($name === '') {
-                    $rowErrors['name'][] = 'Village name (ගම්මානයේ නම) is required.';
-                }
-
-                // 2. Determine if this row is a Draft (INCOMPLETE)
-                // If any of the normally mandatory fields are missing, we treat it as INCOMPLETE.
                 $provinceName = isset($row['province']) ? trim($row['province']) : '';
                 $districtName = isset($row['district_name']) ? trim($row['district_name']) : '';
                 $divisionName = isset($row['division_name']) ? trim($row['division_name']) : '';
                 $categoryCode = isset($row['category_code']) ? trim($row['category_code']) : '';
                 $ownershipBodyCode = isset($row['ownership_body_code']) ? trim($row['ownership_body_code']) : '';
 
-                $isRowDraft = ($provinceName === '' || $districtName === '' || $divisionName === '' || $categoryCode === '');
-                $rawStatus = isset($row['status']) ? strtoupper(trim($row['status'])) : '';
-                $status = in_array($rawStatus, ['YES', 'NO', 'OPEN', 'CLOSED']) ? $rawStatus : null;
+                if ($name === '') {
+                    $rowErrors['name'][] = 'Village name (ගම්මානයේ නම) is required.';
+                }
+                if ($provinceName === '') {
+                    $rowErrors['province'][] = 'Province (පළාත) is required.';
+                }
+                if ($districtName === '') {
+                    $rowErrors['district_name'][] = 'District (දිස්ත්‍රික්කය) is required.';
+                }
+                if ($divisionName === '') {
+                    $rowErrors['division_name'][] = 'DS Division (ප්‍රාදේශීය ලේකම් කොට්ඨාශය) is required.';
+                }
+                if ($categoryCode === '') {
+                    $rowErrors['category_code'][] = 'Funding method (category) is required.';
+                }
 
-                // 3. Resolve Location and validate hierarchy
+                // 2. Resolve Location and validate hierarchy strictly
                 $resolvedDivisionId = null;
-                if ($provinceName !== '' && $districtName !== '' && $divisionName !== '') {
-                    // Fetch district matching district name case-insensitively
+                if ($districtName !== '') {
                     $districtStmt = $db->prepare("SELECT id, province FROM district WHERE LOWER(name) = LOWER(:district)");
                     $districtStmt->execute([':district' => $districtName]);
                     $district = $districtStmt->fetch();
 
                     if (!$district) {
-                        if (!$isRowDraft) $rowErrors['district_name'][] = "District '{$districtName}' does not exist.";
+                        $rowErrors['district_name'][] = "District '{$districtName}' does not exist.";
                     } else {
-                        // Check if province matches
-                        if (strtolower(trim($district['province'])) !== strtolower($provinceName)) {
-                            if (!$isRowDraft) $rowErrors['province'][] = "District '{$districtName}' does not belong to '{$provinceName}' in the database reference list.";
+                        if ($provinceName !== '' && strtolower(trim($district['province'])) !== strtolower($provinceName)) {
+                            $rowErrors['province'][] = "District '{$districtName}' does not belong to '{$provinceName}'.";
                         }
-                        
-                        // Check if division exists under this district
-                        $divisionStmt = $db->prepare("SELECT id FROM division WHERE LOWER(name) = LOWER(:division) AND district_id = :district_id");
-                        $divisionStmt->execute([
-                            ':division' => $divisionName,
-                            ':district_id' => $district['id']
-                        ]);
-                        $division = $divisionStmt->fetch();
-                        
-                        if (!$division) {
-                            if (!$isRowDraft) $rowErrors['division_name'][] = "DS Division '{$divisionName}' does not exist within District '{$districtName}'.";
-                        } else {
-                            $resolvedDivisionId = $division['id'];
+                        if ($divisionName !== '') {
+                            $divisionStmt = $db->prepare("SELECT id FROM division WHERE LOWER(name) = LOWER(:division) AND district_id = :district_id");
+                            $divisionStmt->execute([
+                                ':division' => $divisionName,
+                                ':district_id' => $district['id']
+                            ]);
+                            $division = $divisionStmt->fetch();
+                            if (!$division) {
+                                $rowErrors['division_name'][] = "DS Division '{$divisionName}' does not exist within District '{$districtName}'.";
+                            } else {
+                                $resolvedDivisionId = (int)$division['id'];
+                            }
                         }
                     }
                 }
 
-                // If division ID is not resolved, fallback for drafts, otherwise raise error
-                if (!$resolvedDivisionId) {
-                    if ($isRowDraft) {
-                        $divStmt = $db->query("SELECT id FROM division LIMIT 1");
-                        $resolvedDivisionId = (int)$divStmt->fetchColumn() ?: 1;
-                    } else {
-                        $rowErrors['division_name'][] = 'Could not resolve Divisional Secretariat division.';
-                    }
+                if (!$resolvedDivisionId && $divisionName !== '') {
+                    $rowErrors['division_name'][] = 'Could not resolve Divisional Secretariat division.';
                 }
 
-                // 4. Resolve Category Code
+                // 3. Resolve Category Code
                 $categoryId = null;
                 if ($categoryCode !== '') {
                     $catStmt = $db->prepare("SELECT id FROM village_category WHERE code = :code");
                     $catStmt->execute([':code' => $categoryCode]);
                     $categoryId = $catStmt->fetchColumn();
-                    if (!$categoryId && !$isRowDraft) {
+                    if (!$categoryId && strpos($categoryCode, 'GRANT') === 0) {
+                        $catStmt->execute([':code' => 'GRANT']);
+                        $categoryId = $catStmt->fetchColumn();
+                    }
+                    if (!$categoryId) {
                         $rowErrors['category_code'][] = "Invalid category code '{$categoryCode}'.";
                     }
                 }
 
-                if (!$categoryId) {
-                    $catStmt = $db->query("SELECT id FROM village_category LIMIT 1");
-                    $categoryId = (int)$catStmt->fetchColumn() ?: 1;
-                }
-
-                // 5. Resolve Ownership Body Code
+                // 4. Resolve Ownership Body Code
                 $ownershipBodyId = null;
                 if ($ownershipBodyCode !== '') {
                     $ownStmt = $db->prepare("SELECT id FROM land_ownership_body WHERE code = :code");
                     $ownStmt->execute([':code' => $ownershipBodyCode]);
                     $ownershipBodyId = $ownStmt->fetchColumn() ?: null;
-                    if (!$ownershipBodyId && !$isRowDraft) {
+                    if (!$ownershipBodyId) {
                         $rowErrors['ownership_body_code'][] = "Invalid ownership body code '{$ownershipBodyCode}'.";
                     }
                 }
 
+                $rawStatus = isset($row['status']) ? strtoupper(trim($row['status'])) : '';
+                $status = in_array($rawStatus, ['YES', 'NO', 'OPEN', 'CLOSED']) ? ($rawStatus === 'YES' || $rawStatus === 'OPEN' ? 'OPEN' : 'CLOSED') : null;
 
-                // 6. Construct row array for standard validation
+                // 5. Construct row data for standard validator
                 $rowData = [
                     'name' => $name,
                     'division_id' => $resolvedDivisionId,
@@ -449,21 +448,39 @@ class VillageController {
                     'grama_niladhari_division' => isset($row['grama_niladhari_division']) ? trim($row['grama_niladhari_division']) : null,
                     'total_planned_houses' => isset($row['total_planned_houses']) ? $row['total_planned_houses'] : null,
                     'status' => $status,
-                    'is_conservation_area' => (isset($row['is_conservation_area']) && $row['is_conservation_area'] !== '') ? $row['is_conservation_area'] : 'NONE',
-                    'infrastructure_issues' => isset($row['infrastructure_issues']) ? $row['infrastructure_issues'] : [],
+                    'is_conservation_area' => (!empty($row['is_conservation_area'])) ? $row['is_conservation_area'] : 'NONE',
+                    'infrastructure_issues' => isset($row['infrastructure_issues']) && is_array($row['infrastructure_issues']) ? $row['infrastructure_issues'] : [],
                     'boundary_type' => isset($row['boundary_type']) && trim($row['boundary_type']) !== '' ? trim($row['boundary_type']) : null,
                     'program_start_date' => isset($row['program_start_date']) && trim($row['program_start_date']) !== '' ? trim($row['program_start_date']) : null,
                     'notes' => isset($row['notes']) ? trim($row['notes']) : null,
-                    'google_map_link' => isset($row['google_map_link']) ? trim($row['google_map_link']) : null,
+                    'google_map_link' => isset($row['google_map_link']) && trim($row['google_map_link']) !== '' ? trim($row['google_map_link']) : null,
                 ];
 
-                // 7. Run standard backend validations
+                // Run standard backend VillageValidator
                 $standardErrors = VillageValidator::validate($rowData);
                 if (!empty($standardErrors)) {
                     $rowErrors = array_merge($rowErrors, $standardErrors);
                 }
 
-                // If errors exist on this row, catalog them
+                // 6. Duplicate checking against DB and within current Excel file
+                if ($name !== '' && $resolvedDivisionId !== null) {
+                    $checkStmt = $db->prepare("SELECT id FROM village WHERE LOWER(name) = LOWER(:name) AND division_id = :division_id");
+                    $checkStmt->execute([
+                        ':name' => $name,
+                        ':division_id' => $resolvedDivisionId
+                    ]);
+                    if ($checkStmt->fetch()) {
+                        $rowErrors['name'][] = "A village with name '{$name}' already exists in this Divisional Secretariat division in the database.";
+                    }
+
+                    $batchKey = strtolower($name) . '_' . $resolvedDivisionId;
+                    if (isset($seenInBatch[$batchKey])) {
+                        $rowErrors['name'][] = "Duplicate village '{$name}' specified multiple times in this upload (first seen in Row {$seenInBatch[$batchKey]}).";
+                    } else {
+                        $seenInBatch[$batchKey] = $displayRowIndex;
+                    }
+                }
+
                 if (!empty($rowErrors)) {
                     $validationErrors[$displayRowIndex] = $rowErrors;
                 } else {
@@ -471,90 +488,34 @@ class VillageController {
                 }
             }
 
-            if (!empty($validationErrors)) {
-                http_response_code(400);
-                echo json_encode([
-                    'error' => 'Validation failed for some Excel rows.',
-                    'details' => $validationErrors
-                ]);
-                return;
-            }
-
-            // All validations succeeded. Start atomic database transaction.
-            $db->beginTransaction();
-
-            $insertStmt = $db->prepare("
-                INSERT INTO village (division_id, category_id, ownership_body_id, name,
-                  grama_niladhari_division, total_planned_houses,
-                  status, is_conservation_area, infrastructure_issues, boundary_type,
-                  program_start_date, notes, google_map_link)
-                VALUES (:division_id, :category_id, :ownership_body_id, :name,
-                  :gn_div, :total_planned,
-                  :status, :conservation, :infra_issues, :boundary_type, :start_date, :notes, :google_map_link)
-            ");
-
-            // Prepare duplicate checking statement
-            $checkStmt = $db->prepare("SELECT * FROM village WHERE LOWER(name) = LOWER(:name) AND division_id = :division_id");
-
-            $mergedCount = 0;
             $insertedCount = 0;
-            $skippedCount = 0;
+            if (!empty($validatedRows)) {
+                // Transactional Insert for all validated rows
+                $db->beginTransaction();
 
-            foreach ($validatedRows as $rowData) {
-                // Check if village already exists
-                $checkStmt->execute([
-                    ':name' => $rowData['name'],
-                    ':division_id' => $rowData['division_id']
-                ]);
-                $existing = $checkStmt->fetch();
+                $insertStmt = $db->prepare("
+                    INSERT INTO village (
+                        division_id, category_id, ownership_body_id, name,
+                        grama_niladhari_division, total_planned_houses,
+                        status, is_conservation_area, infrastructure_issues, boundary_type,
+                        program_start_date, notes, google_map_link
+                    ) VALUES (
+                        :division_id, :category_id, :ownership_body_id, :name,
+                        :gn_div, :total_planned,
+                        :status, :conservation, :infra_issues, :boundary_type,
+                        :start_date, :notes, :google_map_link
+                    )
+                ");
 
-                if ($existing) {
-                    $existingStatus = $existing['status'];
-                    if ($existingStatus === 'INCOMPLETE' || empty($existingStatus)) {
-                        // Merge/Enrich existing draft village!
-                        $updateFields = [];
-                        $updateBindings = [':id' => $existing['id']];
-
-                        $fields = [
-                            'category_id', 'ownership_body_id', 'grama_niladhari_division', 
-                            'total_planned_houses', 'status', 'is_conservation_area', 
-                            'infrastructure_issues', 'boundary_type', 'program_start_date', 'notes',
-                            'google_map_link'
-                        ];
-
-                        foreach ($fields as $field) {
-                            if (isset($rowData[$field]) && $rowData[$field] !== '' && $rowData[$field] !== null) {
-                                $val = $rowData[$field];
-                                if ($field === 'infrastructure_issues' && is_array($val)) {
-                                    $val = json_encode($val);
-                                } elseif ($field === 'status') {
-                                    $val = in_array(strtoupper(trim($val)), ['YES', 'OPEN']) ? 'OPEN' : 'CLOSED';
-                                }
-                                $updateFields[] = "`$field` = :$field";
-                                $updateBindings[":$field"] = $val;
-                            }
-                        }
-
-                        if (!empty($updateFields)) {
-                            $updateSql = "UPDATE village SET " . implode(', ', $updateFields) . " WHERE id = :id";
-                            $upStmt = $db->prepare($updateSql);
-                            $upStmt->execute($updateBindings);
-                        }
-                        $mergedCount++;
-                    } else {
-                        // Skip updating finalized village to protect it (as per rewrite policy)
-                        $skippedCount++;
-                    }
-                } else {
-                    // Fresh insert
+                foreach ($validatedRows as $rowData) {
                     $insertStmt->execute([
                         'division_id'       => $rowData['division_id'],
                         'category_id'       => $rowData['category_id'],
                         'ownership_body_id' => $rowData['ownership_body_id'],
                         'name'              => $rowData['name'],
                         'gn_div'            => $rowData['grama_niladhari_division'],
-                        'total_planned'     => $rowData['total_planned_houses'] !== '' && $rowData['total_planned_houses'] !== null ? (int)$rowData['total_planned_houses'] : 0,
-                        'status'            => !empty($rowData['status']) ? (in_array(strtoupper(trim($rowData['status'])), ['YES', 'OPEN']) ? 'OPEN' : 'CLOSED') : null,
+                        'total_planned'     => isset($rowData['total_planned_houses']) && $rowData['total_planned_houses'] !== null ? (int)$rowData['total_planned_houses'] : null,
+                        'status'            => $rowData['status'],
                         'conservation'      => $rowData['is_conservation_area'],
                         'infra_issues'      => !empty($rowData['infrastructure_issues']) ? json_encode($rowData['infrastructure_issues']) : null,
                         'boundary_type'     => $rowData['boundary_type'],
@@ -564,15 +525,26 @@ class VillageController {
                     ]);
                     $insertedCount++;
                 }
+
+                $db->commit();
             }
 
-            $db->commit();
-
-            http_response_code(201);
-            echo json_encode([
-                'success' => true,
-                'message' => "Import complete. Registered: {$insertedCount} new records. Enriched: {$mergedCount} drafts. Skipped: {$skippedCount} finalized duplicates."
-            ]);
+            if (!empty($validationErrors)) {
+                http_response_code(200);
+                echo json_encode([
+                    'success' => false,
+                    'inserted_count' => $insertedCount,
+                    'message' => "Registered {$insertedCount} villages. " . count($validationErrors) . " rows contain validation errors.",
+                    'details' => $validationErrors
+                ]);
+            } else {
+                http_response_code(201);
+                echo json_encode([
+                    'success' => true,
+                    'inserted_count' => $insertedCount,
+                    'message' => "Import complete. Registered {$insertedCount} new villages successfully!"
+                ]);
+            }
 
         } catch (\PDOException $e) {
             if ($db && $db->inTransaction()) {
@@ -670,7 +642,7 @@ class VillageController {
                 'project_id'     => !empty($body['development_project_id']) ? (int)$body['development_project_id'] : null,
                 'gn_div'         => !empty($body['grama_niladhari_division']) ? trim($body['grama_niladhari_division']) : null,
                 'total_planned'  => isset($body['total_planned_houses']) && $body['total_planned_houses'] !== '' ? (int)$body['total_planned_houses'] : 0,
-                'status'         => !empty($body['status']) ? (in_array(strtoupper(trim($body['status'])), ['YES', 'OPEN']) ? 'OPEN' : 'CLOSED') : null,
+                'status'         => !empty($body['status']) && in_array(strtoupper(trim($body['status'])), ['YES', 'NO', 'OPEN', 'CLOSED']) ? (in_array(strtoupper(trim($body['status'])), ['YES', 'OPEN']) ? 'OPEN' : 'CLOSED') : null,
                 'conservation'   => !empty($body['is_conservation_area']) ? $body['is_conservation_area'] : 'NONE',
                 'infra_issues'   => (isset($body['infrastructure_issues']) && is_array($body['infrastructure_issues'])) ? json_encode($body['infrastructure_issues']) : null,
                 'boundary_type'  => !empty($body['boundary_type']) ? $body['boundary_type'] : null,
