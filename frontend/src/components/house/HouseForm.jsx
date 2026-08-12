@@ -18,7 +18,7 @@ const FieldLabel = ({ children, required }) => (
   </label>
 );
 
-export default function HouseForm({ villageId, villageCategoryCode, isLoanVillage, onSuccess, onClose, showTabSwitcher = true }) {
+export default function HouseForm({ houseId, isEditMode = false, villageId, villageCategoryCode, isLoanVillage, onSuccess, onClose, showTabSwitcher = true }) {
   const navigate = useNavigate();
   const bannerRef = useRef(null);
   const [activeTab, setActiveTab] = useState('single'); // 'single' | 'bulk'
@@ -26,6 +26,7 @@ export default function HouseForm({ villageId, villageCategoryCode, isLoanVillag
   const [submitted, setSubmitted] = useState(false);
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
+  const [loadingEditData, setLoadingEditData] = useState(isEditMode);
   const [successMsg, setSuccessMsg] = useState('');
   const [villageCategory, setVillageCategory] = useState(villageCategoryCode || '');
 
@@ -42,6 +43,66 @@ export default function HouseForm({ villageId, villageCategoryCode, isLoanVillag
         .catch((err) => console.error('Failed to fetch village category for house form:', err));
     }
   }, [villageId, villageCategoryCode]);
+
+  useEffect(() => {
+    if (isEditMode && houseId) {
+      setLoadingEditData(true);
+      api.get(`/houses/${houseId}`)
+        .then((res) => {
+          const h = res.data;
+          if (h) {
+            if (h.village_category_code) {
+              setVillageCategory(h.village_category_code);
+            }
+
+            const reverseStageCodeMap = {
+              'NO_FOUNDATION': 'NOT_STARTED',
+              'NOT_STARTED': 'NOT_STARTED',
+              'FOUNDATION_DONE': 'FOUNDATION',
+              'FOUNDATION': 'FOUNDATION',
+              'WALL': 'WALL',
+              'ROOF_LEVEL': 'ROOF',
+              'ROOF_DONE': 'ROOF',
+              'ROOF': 'ROOF',
+              'PLASTERING_DONE': 'FINISHING',
+              'FINISHING': 'FINISHING',
+              'FULLY_DEVELOPED': 'COMPLETED',
+              'COMPLETED': 'COMPLETED'
+            };
+            const mappedStage = reverseStageCodeMap[h.stage_code] || reverseStageCodeMap[h.construction_stage?.code] || '';
+
+            let mappedOwnership = '';
+            if (h.occupancy_status === 'BORROWER_LIVING') mappedOwnership = 'NEW';
+            else if (h.occupancy_status === 'ABANDONED') mappedOwnership = 'REPAIR';
+            else if (h.occupancy_status === 'SOLD' || h.is_land_sold || h.is_house_sold) mappedOwnership = 'RELOCATION';
+
+            setFormData({
+              owner_name: h.owner_name || '',
+              beneficiary_number: h.beneficiary_number || '',
+              owner_nic: h.owner_nic || '',
+              owner_contact: h.owner_contact || '',
+              permanent_address: h.permanent_address || '',
+              house_number: h.house_number || '',
+              land_area_perches: h.land_area_perches !== null && h.land_area_perches !== undefined ? String(h.land_area_perches) : '',
+              ownership: mappedOwnership,
+              infrastructure_issues: Array.isArray(h.infrastructure_issues) ? h.infrastructure_issues : [],
+              construction_stage: mappedStage,
+              current_status: h.current_status || '',
+              estimated_value: h.estimated_value !== null && h.estimated_value !== undefined ? String(h.estimated_value) : '',
+              notes: h.notes || '',
+              loan_amount: h.loan?.loan_amount !== undefined && h.loan?.loan_amount !== null ? String(h.loan.loan_amount) : '',
+              total_paid_so_far: h.loan?.total_paid_so_far !== undefined && h.loan?.total_paid_so_far !== null ? String(h.loan.total_paid_so_far) : '',
+              repayment_status: h.loan?.repayment_status || '',
+              loan_notes: h.loan?.notes || '',
+              grant_amount: h.grant?.grant_amount !== undefined && h.grant?.grant_amount !== null ? String(h.grant.grant_amount) : '',
+              grant_notes: h.grant?.notes || ''
+            });
+          }
+        })
+        .catch((err) => console.error('Failed to fetch house data for editing:', err))
+        .finally(() => setLoadingEditData(false));
+    }
+  }, [houseId, isEditMode]);
 
   const [formData, setFormData] = useState({
     owner_name: '',
@@ -60,7 +121,7 @@ export default function HouseForm({ villageId, villageCategoryCode, isLoanVillag
     // Dynamic Loan / Grant Fields
     loan_amount: '',
     total_paid_so_far: '',
-    repayment_status: 'NOT_PAID',
+    repayment_status: '',
     loan_notes: '',
     grant_amount: '',
     grant_notes: ''
@@ -130,19 +191,7 @@ export default function HouseForm({ villageId, villageCategoryCode, isLoanVillag
       else if (formData.ownership === 'REPAIR') occupancyStatus = 'ABANDONED';
       else if (formData.ownership === 'RELOCATION') occupancyStatus = 'SOLD';
 
-      // Combine notes
-      let finalNotes = '';
-      if (formData.permanent_address) finalNotes += `ස්ථිර ලිපිනය: ${formData.permanent_address}`;
-      if (formData.estimated_value) finalNotes += `\nඇස්තමේන්තුගත වටිනාකම: රු. ${formData.estimated_value}`;
-      if (formData.current_status) {
-        const statusTextMap = {
-          'IN_PROGRESS': 'ඉදිකිරීම් වර්තමානයේ ක්‍රියාත්මක වේ',
-          'STOPPED': 'ඉදිකිරීම් නවතා ඇත',
-          'FINISHED': 'ඉදිකර අවසන්'
-        };
-        finalNotes += `\nවත්මන් තත්ත්වය: ${statusTextMap[formData.current_status] || formData.current_status}`;
-      }
-      if (formData.notes) finalNotes += `\nවෙනත් සටහන්: ${formData.notes}`;
+
 
       const payload = {
         house_number: formData.house_number,
@@ -150,14 +199,18 @@ export default function HouseForm({ villageId, villageCategoryCode, isLoanVillag
         owner_name: formData.owner_name,
         owner_nic: formData.owner_nic,
         owner_contact: formData.owner_contact || null,
+        permanent_address: formData.permanent_address || null,
         household_members: 1,
         land_area_perches: formData.land_area_perches !== '' ? parseFloat(formData.land_area_perches) : null,
+        estimated_value: formData.estimated_value !== '' ? parseFloat(formData.estimated_value) : null,
         construction_stage_id: stageId,
         is_land_sold: formData.ownership === 'RELOCATION' ? 1 : 0,
         is_house_sold: formData.ownership === 'RELOCATION' ? 1 : 0,
         occupancy_status: occupancyStatus,
+        current_status: formData.current_status || null,
         has_infrastructure_issues: formData.infrastructure_issues.length > 0 ? 1 : 0,
-        notes: finalNotes,
+        infrastructure_issues: formData.infrastructure_issues,
+        notes: formData.notes || null,
         // Loan & Grant dynamic fields
         loan_amount: formData.loan_amount !== '' ? parseFloat(formData.loan_amount) : null,
         total_paid_so_far: formData.total_paid_so_far !== '' ? parseFloat(formData.total_paid_so_far) : 0,
@@ -167,36 +220,46 @@ export default function HouseForm({ villageId, villageCategoryCode, isLoanVillag
         grant_notes: formData.grant_notes || null
       };
 
-      await api.post(`/villages/${targetVillageId}/houses`, payload);
-      setSubmitted(true);
-      setSuccessMsg('නිවාස තොරතුරු සාර්ථකව සුරකින ලදී! (House record saved successfully!)');
+      if (isEditMode && houseId) {
+        await api.put(`/houses/${houseId}`, payload);
+        setSubmitted(true);
+        setSuccessMsg('නිවාස තොරතුරු සාර්ථකව සංස්කරණය කරන ලදී! (House record updated successfully!)');
+        setTimeout(() => {
+          if (onSuccess) onSuccess();
+          else navigate(`/houses/${houseId}`);
+        }, 1500);
+      } else {
+        await api.post(`/villages/${targetVillageId}/houses`, payload);
+        setSubmitted(true);
+        setSuccessMsg('නිවාස තොරතුරු සාර්ථකව සුරකින ලදී! (House record saved successfully!)');
 
-      // Reset form input values for continuous house entry
-      setFormData({
-        owner_name: '',
-        beneficiary_number: '',
-        owner_nic: '',
-        owner_contact: '',
-        permanent_address: '',
-        house_number: '',
-        land_area_perches: '',
-        ownership: '',
-        infrastructure_issues: [],
-        construction_stage: '',
-        current_status: '',
-        estimated_value: '',
-        notes: '',
-        loan_amount: '',
-        total_paid_so_far: '',
-        repayment_status: 'NOT_PAID',
-        loan_notes: '',
-        grant_amount: '',
-        grant_notes: ''
-      });
+        // Reset form input values for continuous house entry
+        setFormData({
+          owner_name: '',
+          beneficiary_number: '',
+          owner_nic: '',
+          owner_contact: '',
+          permanent_address: '',
+          house_number: '',
+          land_area_perches: '',
+          ownership: '',
+          infrastructure_issues: [],
+          construction_stage: '',
+          current_status: '',
+          estimated_value: '',
+          notes: '',
+          loan_amount: '',
+          total_paid_so_far: '',
+          repayment_status: 'NOT_PAID',
+          loan_notes: '',
+          grant_amount: '',
+          grant_notes: ''
+        });
 
-      setTimeout(() => {
-        bannerRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }, 100);
+        setTimeout(() => {
+          bannerRef.current?.scrollIntoView({ behavior: 'smooth' });
+        }, 100);
+      }
     } catch (err) {
       if (err.response?.status === 400 && err.response?.data?.details) {
         setErrors(err.response.data.details);
@@ -212,6 +275,15 @@ export default function HouseForm({ villageId, villageCategoryCode, isLoanVillag
       setSubmitting(false);
     }
   };
+
+  if (loadingEditData) {
+    return (
+      <div className="p-20 flex flex-col items-center justify-center bg-white rounded-2xl border border-slate-200">
+        <div className="w-10 h-10 border-4 border-slate-100 border-t-indigo-600 rounded-full animate-spin mb-4" />
+        <p className="text-slate-500 text-sm font-semibold">Loading existing house data for editing...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -454,10 +526,10 @@ export default function HouseForm({ villageId, villageCategoryCode, isLoanVillag
 
           {/* Section 4: Dynamic Loan / Grant Details */}
           {(villageCategory === 'LOAN' || isLoanVillage) && (
-            <FormSection title="Loan Details / ණය පිළිබඳ විස්තර">
+            <FormSection title="Loan Details">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div>
-                  <FieldLabel>මුළු ණය මුදල(රු.) / Total Loan(LKR)</FieldLabel>
+                  <FieldLabel>මුළු ණය මුදල(රු.) / Total Loan</FieldLabel>
                   <input
                     type="number"
                     name="loan_amount"
@@ -478,7 +550,7 @@ export default function HouseForm({ villageId, villageCategoryCode, isLoanVillag
                     step="0.01"
                     value={formData.total_paid_so_far}
                     onChange={handleChange}
-                    placeholder="රු. 0.00"
+                    placeholder="උදා - 20000.00"
                     className={getInputCls('total_paid_so_far')}
                   />
                   {errors.total_paid_so_far && <p className="text-xs text-rose-500 font-medium mt-1.5">{errors.total_paid_so_far[0]}</p>}
@@ -492,9 +564,8 @@ export default function HouseForm({ villageId, villageCategoryCode, isLoanVillag
                     onChange={handleChange}
                     className={getSelectCls('repayment_status')}
                   >
-                    <option value="NOT_PAID">තවම ගෙවා නැත / Not Paid</option>
+                    <option value="">-- තත්ත්වය තෝරන්න --</option>
                     <option value="PAYING">ගෙවමින් පවතී / Paying</option>
-                    <option value="PARTIALLY_PAID">කොටසක් ගෙවා ඇත / Partially Paid</option>
                     <option value="FULLY_PAID">සම්පූර්ණයෙන්ම ගෙවා අවසන් / Fully Paid</option>
                     <option value="DEFAULTED">පැහැර හැර ඇත / Defaulted</option>
                   </select>
@@ -502,13 +573,13 @@ export default function HouseForm({ villageId, villageCategoryCode, isLoanVillag
                 </div>
 
                 <div className="md:col-span-3">
-                  <FieldLabel>ණය පිළිබඳ වෙනත් සටහන් / Loan Notes</FieldLabel>
+                  <FieldLabel>ණය පිළිබඳ වෙනත් සටහන් / Other Loan Details</FieldLabel>
                   <textarea
                     rows="2"
                     name="loan_notes"
                     value={formData.loan_notes}
                     onChange={handleChange}
-                    placeholder="ණය සම්බන්ධ වෙනත් සටහන් ඇතුළත් කරන්න..."
+                    placeholder="ණය සම්බන්ධ වෙනත් සටහන් ඇත්නම් ඇතුළත් කරන්න"
                     className={getInputCls('loan_notes')}
                   />
                   {errors.loan_notes && <p className="text-xs text-rose-500 font-medium mt-1.5">{errors.loan_notes[0]}</p>}
@@ -518,10 +589,10 @@ export default function HouseForm({ villageId, villageCategoryCode, isLoanVillag
           )}
 
           {(villageCategory && (villageCategory.startsWith('GRANT') || villageCategory.includes('GRANT'))) && (
-            <FormSection title="Grant Details / දීමනා පිළිබඳ විස්තර">
+            <FormSection title="Grant Details">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div>
-                  <FieldLabel>මුළු දීමනා මුදල (රු.) / Total Grant (LKR)</FieldLabel>
+                  <FieldLabel>මුළු දීමනා මුදල (රු.) / Total Grant</FieldLabel>
                   <input
                     type="number"
                     name="grant_amount"
@@ -535,13 +606,13 @@ export default function HouseForm({ villageId, villageCategoryCode, isLoanVillag
                 </div>
 
                 <div className="md:col-span-2">
-                  <FieldLabel>දීමනා පිළිබඳ වෙනත් සටහන් / Grant Other Notes</FieldLabel>
+                  <FieldLabel>දීමනා පිළිබඳ වෙනත් සටහන් / Other Grant Details</FieldLabel>
                   <textarea
                     rows="2"
                     name="grant_notes"
                     value={formData.grant_notes}
                     onChange={handleChange}
-                    placeholder="දීමනාව සම්බන්ධ වෙනත් සටහන්  ඇත්නම් ඇතුළත් කරන්න"
+                    placeholder="දීමනාව සම්බන්ධ වෙනත් සටහන් ඇත්නම් ඇතුළත් කරන්න"
                     className={getInputCls('grant_notes')}
                   />
                   {errors.grant_notes && <p className="text-xs text-rose-500 font-medium mt-1.5">{errors.grant_notes[0]}</p>}

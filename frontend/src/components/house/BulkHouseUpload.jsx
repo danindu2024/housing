@@ -1,7 +1,48 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import XLSX from 'xlsx-js-style';
+import { unzipSync, zipSync, strFromU8, strToU8 } from 'fflate';
 import api from '../../api/axios';
+
+const saveWorkbookWithFreeze = (wb, fileName, sheetName, ySplitRows = 2) => {
+  const wbOut = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+
+  try {
+    const unzipped = unzipSync(new Uint8Array(wbOut));
+    const sheetPath = 'xl/worksheets/sheet1.xml';
+
+    if (unzipped[sheetPath]) {
+      let sheetXml = strFromU8(unzipped[sheetPath]);
+      const paneXml = `<pane ySplit="${ySplitRows}" topLeftCell="A${ySplitRows + 1}" activePane="bottomLeft" state="frozen"/>`;
+
+      if (sheetXml.includes('<sheetViews>')) {
+        if (sheetXml.includes('<sheetView')) {
+          sheetXml = sheetXml.replace(/<sheetView([^>]*)\/>/g, `<sheetView$1>${paneXml}</sheetView>`);
+          sheetXml = sheetXml.replace(/(<sheetView[^>]*>)(?![\s\S]*?<pane)/g, `$1${paneXml}`);
+        }
+      } else {
+        const sheetViewsTag = `<sheetViews><sheetView workbookViewId="0">${paneXml}</sheetView></sheetViews>`;
+        sheetXml = sheetXml.replace(/(<worksheet[^>]*>)/, `$1${sheetViewsTag}`);
+      }
+
+      unzipped[sheetPath] = strToU8(sheetXml);
+    }
+
+    const modifiedZip = zipSync(unzipped);
+    const blob = new Blob([modifiedZip], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    console.error('Freeze pane patch fallback:', e);
+    XLSX.writeFile(wb, fileName);
+  }
+};
 
 const FieldLabel = ({ children, required }) => (
   <label className="block text-sm font-bold uppercase tracking-wider text-slate-500 mb-2">
@@ -21,6 +62,7 @@ const BulkHouseUpload = ({ villageId, onSuccess }) => {
   const [rawAoa, setRawAoa] = useState([]); // Stores raw parsed cells for error sheet reconstruction
   const [isParsing, setIsParsing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState({ currentChunk: 0, totalChunks: 0, processedRows: 0, totalRows: 0 });
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [validationErrors, setValidationErrors] = useState(null);
@@ -40,54 +82,210 @@ const BulkHouseUpload = ({ villageId, onSuccess }) => {
     }
   }, [villageId]);
 
-  // 1. Dual-Header Specifications (25 Columns)
-  const headers1 = [
-    'මූලික තොරතුරු', '', '', '', '', '', '', '', '', '', // Col A to J (merged - 10 columns)
-    'ඉදිකිරීම් ප්‍රගතිය', '', '', '', '', '', '', '', // Col K to R (merged - 8 stages)
-    'හිමිකම් සහ පදිංචිය', '', '', // Col S to U (merged - 3 fields)
-    'යටිතල පහසුකම්', '', '', // Col V to X (merged - 3 fields)
-    'අමතර විස්තර' // Col Y (1 field)
-  ];
+  // 1. Dual-Header Specifications
+  const getHeaders = () => {
+    const catCode = currentVillage?.category_code || '';
+    const isLoanOnly = catCode === 'LOAN' || (currentVillage?.is_loan && !catCode.includes('GRANT'));
+    const isGrantOnly = catCode.includes('GRANT') && !isLoanOnly;
 
-  const headers2 = [
-    'පළාත (Province)',
-    'දිස්ත්‍රික්කය (District)',
-    'ප්‍රාදේශීය ලේකම් කොට්ඨාශය (DS Division)',
-    'ගම්මානයේ නම (Village Name)',
-    'මූලික පිඹුරේ හෝ කට්ටි සැලැස්මේ අංකය',
-    'හිමිකරුගේ නම',
-    'ජාතික හැඳුනුම්පත් අංකය',
-    'දුරකථන අංකය',
-    'ස්ථිර නිවාස ලිපිනය',
-    'ඉඩම් ප්‍රමාණය (පර්චස්)',
-    'ආරම්භ කර නොමැත',
-    'අඩිතාලම දමා ඇත',
-    'ජනෙල් මට්ටමට නිමකර ඇත',
-    'ලින්ටල් මට්ටමට නිමකර ඇත',
-    'වහල මට්ටමට නිමකර ඇත',
-    'වහලය නිමකර ඇත',
-    'කපරාරු නිමකර ඇත',
-    'නිවස සම්පූර්ණයෙන් ඉදිකර ඇත',
-    'ඉඩම විකුණා ඇත (YES/NO)',
-    'නිවස විකුණා ඇත (YES/NO)',
-    'පදිංචි ස්වභාවය',
-    'ජලය (YES/NO)',
-    'විදුලිය (YES/NO)',
-    'ප්‍රවේශ මාර්ග (YES/NO)',
-    'සටහන්'
-  ];
+    if (villageId) {
+      const financialHeader1 = isLoanOnly
+        ? ['ණය විස්තර / Loan Details', '', '', '']
+        : isGrantOnly
+        ? ['දීමනා විස්තර / Grant Details', '']
+        : ['ණය / දීමනා විස්තර / Loan / Grant Details', '', '', '', '', ''];
 
-  const sampleRow = [
-    currentVillage?.province || 'Central',
-    currentVillage?.district_name || 'Kandy',
-    currentVillage?.division_name || 'Kundasale',
-    currentVillage?.name || 'Sampathgama',
-    'HOU-001', 'දිලාන් පෙරේරා', '199012345678', '0771234567', 'නො. 45, ගාලු පාර, කොළඹ 03', '15',
-    'NO', 'NO', 'NO', 'NO', 'NO', 'NO', 'NO', 'YES',
-    'NO', 'NO', 'Borrower Living',
-    'YES', 'YES', 'NO',
-    'නව නිවාස ඉදිකිරීම් කටයුතු සතුටුදායක මට්ටමක පවතී.'
-  ];
+      const financialHeader2 = isLoanOnly
+        ? [
+            'මුළු ණය මුදල - රු. (Total Loan)',
+            'මේ දක්වා ගෙවා ඇති මුදල - රු. (Paid So Far)',
+            'ණය ආපසු ගෙවීමේ තත්ත්වය (PAYING/FULLY_PAID/DEFAULTED)',
+            'ණය පිළිබඳ වෙනත් සටහන් (Other Loan Notes)'
+          ]
+        : isGrantOnly
+        ? [
+            'මුළු දීමනා මුදල - රු. (Total Grant)',
+            'දීමනා පිළිබඳ වෙනත් සටහන් (Other Grant Notes)'
+          ]
+        : [
+            'මුළු ණය මුදල - රු. (Total Loan)',
+            'මේ දක්වා ගෙවා ඇති මුදල - රු. (Paid So Far)',
+            'ණය ආපසු ගෙවීමේ තත්ත්වය / Repayment Status (PAYING/FULLY_PAID/DEFAULTED)',
+            'ණය පිළිබඳ වෙනත් සටහන් (Other Loan Notes)',
+            'මුළු දීමනා මුදල - රු. (Total Grant)',
+            'දීමනා පිළිබඳ වෙනත් සටහන් (Other Grant Notes)'
+          ];
+
+      const financialSample = isLoanOnly
+        ? ['100000', '20000', 'PAYING', 'මාසිකව ගෙවනු ලැබේ']
+        : isGrantOnly
+        ? ['100000', 'පළමු වාරිකය ලබා දී ඇත']
+        : ['100000', '20000', 'PAYING', 'මාසිකව ගෙවනු ලැබේ', '', ''];
+
+      const finCount = financialHeader2.length;
+      const finEndCol = 25 + finCount;
+
+      return {
+        headers1: [
+          'ප්‍රතිලාභකරුගේ තොරතුරු / Beneficiary Details', '', '', '', '', // Col A to E (5 cols)
+          'නිවාස සහ ඉඩමේ තොරතුරු / Housing and Land Details', '', // Col F to G (2 cols)
+          'අයිතිය / Ownership', '', '', // Col H to J (3 cols) -> SEPARATE HEADER
+          'යටිතල පහසුකම් / Infrastructure', '', '', // Col K to M (3 cols) -> SEPARATE HEADER
+          'ඉදිකිරීම් ප්‍රගතිය / Construction Progress', '', '', '', '', '', '', '', // Col N to U (8 cols)
+          'වත්මන් ක්‍රියාකාරී තත්ත්වය / Current Active Status', '', '', // Col V to X (3 cols)
+          'ඇස්තමේන්තු සහ සටහන් / Estimated Costs and Notes', '', // Col Y to Z (2 cols)
+          ...financialHeader1
+        ],
+        headers2: [
+          'ප්‍රතිලාභී අංකය (Beneficiary Number) *',
+          'ප්‍රතිලාභකරුගේ සම්පූර්ණ නම (Beneficiary Name) *',
+          'ජාතික හැඳුනුම්පත් අංකය (NIC Number)',
+          'දුරකථන අංකය (Phone Number)',
+          'ස්ථිර නිවාස ලිපිනය (Permanent Address)',
+          'මූලික පිඹුරේ හෝ කට්ටි සැලැස්මේ අංකය (House Plan Number)',
+          'ඉඩමේ ප්‍රමාණය - පර්චස් (Land Extent - Perches)',
+          'අයිතිය ප්‍රතිලාභියා සතුයි (Beneficier Has Ownership)',
+          'නිවස කුලියට දී ඇත (House is Rented)',
+          'ඉඩම/නිවස විකුණා ඇත (Land/House is Sold)',
+          'ජලය (Water)',
+          'විදුලිය (Electricity)',
+          'ප්‍රවේශ මාර්ග (Access Roads)',
+          'ආරම්භ කර නොමැත (Not Started)',
+          'අත්තිවාරම දමා ඇත (Foundation Complete)',
+          'ජනෙල් මට්ටමට නිමකර ඇත (Window Level Completed)',
+          'ලින්ටල් මට්ටමට නිමකර ඇත (Lintel Level Completed)',
+          'වහල මට්ටමට නිමකර ඇත (Roof Level Completed)',
+          'වහලය නිමකර ඇත (Roof Completed)',
+          'කපරාරු නිමකර ඇත (Plastering Complete)',
+          'නිවස සම්පූර්ණයෙන් ඉදිකර ඇත (Fully Completed)',
+          'ඉදිකිරීම් වර්තමානයේ ක්‍රියාත්මක වේ (Active Construction)',
+          'ඉදිකිරීම් නවතා ඇත (Construction Stopped)',
+          'ඉදිකර අවසන් (Construction Completed)',
+          'ඉදිකර ඇති කොටසේ දළ වටිනාකම - රු. (Estimated Construction Value)',
+          'වෙනත් සටහන් (Other Notes)',
+          ...financialHeader2
+        ],
+        sampleRow: [
+          'NH/HA/MV/SD/0001', 'දිලාන් පෙරේරා', '199012345678', '0771234567', 'නො. 45, ගාලු පාර, කොළඹ 03',
+          'HOU-001', '15',
+          'YES', '', '',
+          'YES', 'YES', '',
+          '', '', '', '', '', '', '', 'YES',
+          'YES', '', '',
+          '500000', 'නොමැත',
+          ...financialSample
+        ],
+        merges: [
+          { s: { r: 0, c: 0 }, e: { r: 0, c: 4 } },   // ප්‍රතිලාභකරුගේ තොරතුරු
+          { s: { r: 0, c: 5 }, e: { r: 0, c: 6 } },   // නිවාස සහ ඉඩමේ තොරතුරු
+          { s: { r: 0, c: 7 }, e: { r: 0, c: 9 } },   // අයිතිය
+          { s: { r: 0, c: 10 }, e: { r: 0, c: 12 } }, // යටිතල පහසුකම්
+          { s: { r: 0, c: 13 }, e: { r: 0, c: 20 } }, // ඉදිකිරීම් ප්‍රගතිය
+          { s: { r: 0, c: 21 }, e: { r: 0, c: 23 } }, // වත්මන් ක්‍රියාකාරී තත්ත්වය
+          { s: { r: 0, c: 24 }, e: { r: 0, c: 25 } }, // ඇස්තමේන්තු සහ සටහන්
+          { s: { r: 0, c: 26 }, e: { r: 0, c: finEndCol } }  // Dynamic Loan/Grant
+        ],
+        sections: [
+          { start: 0, end: 4, color: '4F46E5', subColor: 'EEF2F6', textDark: '1E293B', textLight: 'FFFFFF' },
+          { start: 5, end: 6, color: '0284C7', subColor: 'E0F2FE', textDark: '0369A1', textLight: 'FFFFFF' },
+          { start: 7, end: 9, color: '0D9488', subColor: 'CCFBF1', textDark: '115E59', textLight: 'FFFFFF' },
+          { start: 10, end: 12, color: '7C3AED', subColor: 'EDE9FE', textDark: '4C1D95', textLight: 'FFFFFF' },
+          { start: 13, end: 20, color: 'D97706', subColor: 'FEF3C7', textDark: '78350F', textLight: 'FFFFFF' },
+          { start: 21, end: 23, color: '059669', subColor: 'D1FAE5', textDark: '064E3B', textLight: 'FFFFFF' },
+          { start: 24, end: 25, color: '475569', subColor: 'F1F5F9', textDark: '0F172A', textLight: 'FFFFFF' },
+          { start: 26, end: finEndCol, color: 'C026D3', subColor: 'F5D0FE', textDark: '701A75', textLight: 'FFFFFF' }
+        ]
+      };
+    } else {
+      return {
+        headers1: [
+          'ස්ථානීය තොරතුරු / Location Details', '', '', '',
+          'ප්‍රතිලාභකරුගේ තොරතුරු / Beneficiary Details', '', '', '', '',
+          'නිවාස සහ ඉඩමේ තොරතුරු / Housing and Land Details', '',
+          'අයිතිය / Ownership', '', '',
+          'යටිතල පහසුකම් / Infrastructure', '', '',
+          'ඉදිකිරීම් ප්‍රගතිය / Construction Progress', '', '', '', '', '', '', '',
+          'වත්මන් ක්‍රියාකාරී තත්ත්වය / Current Active Status', '', '',
+          'ඇස්තමේන්තු සහ සටහන් / Estimated Costs and Notes', '',
+          'ණය / දීමනා විස්තර / Loan / Grant Details', '', '', '', '', ''
+        ],
+        headers2: [
+          'පළාත (Province) *',
+          'දිස්ත්‍රික්කය (District) *',
+          'ප්‍රාදේශීය ලේකම් කොට්ඨාශය (DS Division) *',
+          'ගම්මානයේ නම (Village Name) *',
+          'ප්‍රතිලාභී අංකය (Beneficiary Number) *',
+          'ප්‍රතිලාභකරුගේ සම්පූර්ණ නම (Beneficiary Name) *',
+          'ජාතික හැඳුනුම්පත් අංකය (NIC Number)',
+          'දුරකථන අංකය (Phone Number)',
+          'ස්ථිර නිවාස ලිපිනය (Permanent Address)',
+          'මූලික පිඹුරේ හෝ කට්ටි සැලැස්මේ අංකය (House Plan Number)',
+          'ඉඩමේ ප්‍රමාණය - පර්චස් (Land Extent - Perches)',
+          'අයිතිය ප්‍රතිලාභියා සතුයි (Beneficier Has Ownership)',
+          'නිවස කුලියට දී ඇත (House is Rented)',
+          'ඉඩම/නිවස විකුණා ඇත (Land/House is Sold)',
+          'ජලය (Water)',
+          'විදුලිය (Electricity)',
+          'ප්‍රවේශ මාර්ග (Access Roads)',
+          'ආරම්භ කර නොමැත (Not Started)',
+          'අත්තිවාරම දමා ඇත (Foundation Complete)',
+          'ජනෙල් මට්ටමට නිමකර ඇත (Window Level Completed)',
+          'ලින්ටල් මට්ටමට නිමකර ඇත (Lintel Level Completed)',
+          'වහල මට්ටමට නිමකර ඇත (Roof Level Completed)',
+          'වහලය නිමකර ඇත (Roof Completed)',
+          'කපරාරු නිමකර ඇත (Plastering Complete)',
+          'නිවස සම්පූර්ණයෙන් ඉදිකර ඇත (Fully Completed)',
+          'ඉදිකිරීම් වර්තමානයේ ක්‍රියාත්මක වේ (Active Construction)',
+          'ඉදිකිරීම් නවතා ඇත (Construction Stopped)',
+          'ඉදිකර අවසන් (Construction Completed)',
+          'ඉදිකර ඇති කොටසේ දළ වටිනාකම - රු. (Estimated Construction Value)',
+          'වෙනත් සටහන් (Other Notes)',
+          'මුළු ණය මුදල - රු. (Total Loan)',
+          'මේ දක්වා ගෙවා ඇති මුදල - රු. (Paid So Far)',
+          'ණය ආපසු ගෙවීමේ තත්ත්වය (PAYING/FULLY_PAID/DEFAULTED)',
+          'ණය පිළිබඳ වෙනත් සටහන් (Other Loan Notes)',
+          'මුළු දීමනා මුදල - රු. (Total Grant)',
+          'දීමනා පිළිබඳ වෙනත් සටහන් (Other Grant Notes)'
+        ],
+        sampleRow: [
+          currentVillage?.province || 'Central',
+          currentVillage?.district_name || 'Kandy',
+          currentVillage?.division_name || 'Kundasale',
+          currentVillage?.name || 'Sampathgama',
+          'NH/HA/MV/SD/0001', 'දිලාන් පෙරේරා', '199012345678', '0771234567', 'නො. 45, ගාලු පාර, කොළඹ 03',
+          'HOU-001', '15',
+          'YES', 'NO', 'NO',
+          'YES', 'YES', 'NO',
+          'NO', 'NO', 'NO', 'NO', 'NO', 'NO', 'NO', 'YES',
+          'YES', 'NO', 'NO',
+          '500000', 'සතුටුදායක තත්ත්වයක පවතී',
+          '100000', '20000', 'PAYING', 'මාසිකව ගෙවනු ලැබේ', '', ''
+        ],
+        merges: [
+          { s: { r: 0, c: 0 }, e: { r: 0, c: 3 } },   // ස්ථානීය තොරතුරු
+          { s: { r: 0, c: 4 }, e: { r: 0, c: 8 } },   // ප්‍රතිලාභකරුගේ තොරතුරු
+          { s: { r: 0, c: 9 }, e: { r: 0, c: 10 } },  // නිවාස සහ ඉඩමේ තොරතුරු
+          { s: { r: 0, c: 11 }, e: { r: 0, c: 13 } }, // අයිතිය
+          { s: { r: 0, c: 14 }, e: { r: 0, c: 16 } }, // යටිතල පහසුකම්
+          { s: { r: 0, c: 17 }, e: { r: 0, c: 24 } }, // ඉදිකිරීම් ප්‍රගතිය
+          { s: { r: 0, c: 25 }, e: { r: 0, c: 27 } }, // වත්මන් ක්‍රියාකාරී තත්ත්වය
+          { s: { r: 0, c: 28 }, e: { r: 0, c: 29 } }, // ඇස්තමේන්තු සහ සටහන්
+          { s: { r: 0, c: 30 }, e: { r: 0, c: 35 } }  // ණය / දීමනා විස්තර
+        ],
+        sections: [
+          { start: 0, end: 3, color: '312E81', subColor: 'E0E7FF', textDark: '1E1B4B', textLight: 'FFFFFF' },
+          { start: 4, end: 8, color: '4F46E5', subColor: 'EEF2F6', textDark: '1E293B', textLight: 'FFFFFF' },
+          { start: 9, end: 10, color: '0284C7', subColor: 'E0F2FE', textDark: '0369A1', textLight: 'FFFFFF' },
+          { start: 11, end: 13, color: '0D9488', subColor: 'CCFBF1', textDark: '115E59', textLight: 'FFFFFF' },
+          { start: 14, end: 16, color: '7C3AED', subColor: 'EDE9FE', textDark: '4C1D95', textLight: 'FFFFFF' },
+          { start: 17, end: 24, color: 'D97706', subColor: 'FEF3C7', textDark: '78350F', textLight: 'FFFFFF' },
+          { start: 25, end: 27, color: '059669', subColor: 'D1FAE5', textDark: '064E3B', textLight: 'FFFFFF' },
+          { start: 28, end: 29, color: '475569', subColor: 'F1F5F9', textDark: '0F172A', textLight: 'FFFFFF' },
+          { start: 30, end: 35, color: 'C026D3', subColor: 'F5D0FE', textDark: '701A75', textLight: 'FFFFFF' }
+        ]
+      };
+    }
+  };
 
   // Helper: check if cell value counts as checked
   const isTrueVal = (val) => {
@@ -109,33 +307,21 @@ const BulkHouseUpload = ({ villageId, onSuccess }) => {
 
   // 2. Generate and download template .xlsx file with cell styling
   const handleDownloadTemplate = () => {
-    const data = [headers1, headers2, sampleRow];
+    const config = getHeaders();
+    const data = [config.headers1, config.headers2, config.sampleRow];
     const ws = XLSX.utils.aoa_to_sheet(data);
 
-    // Set Merges
-    ws['!merges'] = [
-      { s: { r: 0, c: 0 }, e: { r: 0, c: 9 } },   // මූලික තොරතුරු (A1:J1)
-      { s: { r: 0, c: 10 }, e: { r: 0, c: 17 } },  // ඉදිකිරීම් ප්‍රගතිය (K1:R1)
-      { s: { r: 0, c: 18 }, e: { r: 0, c: 20 } }, // හිමිකම් සහ පදිංචිය (S1:U1)
-      { s: { r: 0, c: 21 }, e: { r: 0, c: 23 } }, // යටිතල පහසුකම් (V1:X1)
-      { s: { r: 0, c: 24 }, e: { r: 0, c: 24 } }  // අමතර විස්තර (Y1:Y1)
-    ];
-
+    ws['!merges'] = config.merges;
     ws['!rows'] = [
-      { hpt: 30 }, // Merged Row 1
-      { hpt: 26 }  // Subtitles Row 2
+      { hpt: 35 }, // Group Header Row 1
+      { hpt: 55 }  // Subheader Row 2 (wraps bilingual text comfortably)
     ];
 
-    // Style Groups with color-coded palettes
-    const sections = [
-      { start: 0, end: 9, color: '4F46E5', subColor: 'EEF2F6', textDark: '1E293B', textLight: 'FFFFFF' }, // Indigo
-      { start: 10, end: 17, color: 'D97706', subColor: 'FEF3C7', textDark: '78350F', textLight: 'FFFFFF' }, // Amber
-      { start: 18, end: 20, color: '059669', subColor: 'D1FAE5', textDark: '064E3B', textLight: 'FFFFFF' }, // Emerald
-      { start: 21, end: 23, color: '7C3AED', subColor: 'EDE9FE', textDark: '4C1D95', textLight: 'FFFFFF' }, // Violet
-      { start: 24, end: 24, color: '475569', subColor: 'F1F5F9', textDark: '0F172A', textLight: 'FFFFFF' }  // Slate
-    ];
+    // Freeze top 2 header rows so headers remain visible when scrolling
+    ws['!freeze'] = { xSplit: 0, ySplit: 2, topLeftCell: 'A3', activePane: 'bottomLeft', state: 'frozen' };
+    ws['!views'] = [{ state: 'frozen', xSplit: 0, ySplit: 2, topLeftCell: 'A3', activePane: 'bottomLeft' }];
 
-    sections.forEach((sec) => {
+    config.sections.forEach((sec) => {
       // Style merged top row headers
       for (let c = sec.start; c <= sec.end; c++) {
         const cellRef = `${getColLetter(c)}1`;
@@ -173,26 +359,62 @@ const BulkHouseUpload = ({ villageId, onSuccess }) => {
       }
     });
 
-    // Auto-adjust column sizes dynamically
-    const colWidths = headers2.map((h2, i) => {
-      const h1 = headers1[i] || '';
-      const sampleVal = String(sampleRow[i] || '');
-      
-      const maxLen = Math.max(h1.length, h2.length, sampleVal.length);
-      return { wch: Math.min(Math.max(maxLen + 4, 15), 45) };
+    // Fixed compact column widths based on content type to eliminate excessive scrolling
+    const colWidths = config.headers2.map((h2, i) => {
+      if (villageId) {
+        if (i === 0) return { wch: 22 }; // Beneficiary Number
+        if (i === 1) return { wch: 24 }; // Beneficiary Name
+        if (i === 2) return { wch: 18 }; // NIC
+        if (i === 3) return { wch: 16 }; // Phone
+        if (i === 4) return { wch: 28 }; // Address
+        if (i === 5) return { wch: 18 }; // House Plan No
+        if (i === 6) return { wch: 15 }; // Land Size
+        if (i >= 7 && i <= 23) return { wch: 15 }; // Option sub-columns
+        if (i === 24) return { wch: 20 }; // Estimated Value
+        if (i === 25) return { wch: 25 }; // Notes
+        return { wch: 20 }; // Financial Columns
+      } else {
+        if (i >= 0 && i <= 3) return { wch: 18 }; // Location Details
+        if (i === 4) return { wch: 22 }; // Beneficiary Number
+        if (i === 5) return { wch: 24 }; // Beneficiary Name
+        if (i === 6) return { wch: 18 }; // NIC
+        if (i === 7) return { wch: 16 }; // Phone
+        if (i === 8) return { wch: 28 }; // Address
+        if (i === 9) return { wch: 18 }; // House Plan No
+        if (i === 10) return { wch: 15 }; // Land Size
+        if (i >= 11 && i <= 27) return { wch: 15 }; // Option sub-columns
+        if (i === 28) return { wch: 20 }; // Estimated Value
+        if (i === 29) return { wch: 25 }; // Notes
+        return { wch: 20 }; // Financial Columns
+      }
     });
     ws['!cols'] = colWidths;
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'House Template');
-    XLSX.writeFile(wb, 'House_Bulk_Registration_Template.xlsx');
+    saveWorkbookWithFreeze(wb, 'House_Bulk_Import_Template.xlsx', 'House Template', 2);
   };
 
-  // 3. Process the file data from Row 3 onwards
+  // 3. Process Uploaded File with 2MB Guard and Positional AOA Parsing
   const processFile = (file) => {
     setErrorMsg('');
     setSuccessMsg('');
     setValidationErrors(null);
+    setFileName('');
+    setParsedRows([]);
+    setRawAoa([]);
+
+    const MAX_SIZE = 2 * 1024 * 1024;
+    if (file.size > MAX_SIZE) {
+      setErrorMsg(`ගොනු ප්‍රමාණය 2MB සීමාව ඉක්මවා ඇත. (Uploaded file size ${(file.size / (1024 * 1024)).toFixed(2)}MB exceeds the 2MB limit).`);
+      return;
+    }
+
+    if (!file.name.match(/\.(xlsx|xls)$/i)) {
+      setErrorMsg('කරුණාකර වලංගු Excel ගොනුවක් තෝරන්න (.xlsx හෝ .xls).');
+      return;
+    }
+
     setFileName(file.name);
     setIsParsing(true);
 
@@ -214,64 +436,153 @@ const BulkHouseUpload = ({ villageId, onSuccess }) => {
         }
 
         setRawAoa(parsedAoa);
-
         const dataRows = parsedAoa.slice(2);
+        const offset = villageId ? 0 : 4;
+
+        const catCode = currentVillage?.category_code || '';
+        const isLoanOnly = villageId && (catCode === 'LOAN' || (currentVillage?.is_loan && !catCode.includes('GRANT')));
+        const isGrantOnly = villageId && catCode.includes('GRANT') && !isLoanOnly;
+
+        const seenInBatch = {};
 
         const mappedRows = dataRows.map((row, idx) => {
-          if (!row || row.length === 0 || (row[4] === '' && row[5] === '')) return null;
+          if (!row || row.length === 0) return null;
 
-          // 3.1 Construction Stage Map
-          let constructionStage = 'No Foundation';
-          if (isTrueVal(row[10])) constructionStage = 'No Foundation';
-          else if (isTrueVal(row[11])) constructionStage = 'Foundation Done';
-          else if (isTrueVal(row[12])) constructionStage = 'Windows Done';
-          else if (isTrueVal(row[13])) constructionStage = 'Lintel Done';
-          else if (isTrueVal(row[14])) constructionStage = 'Reached Roof Level';
-          else if (isTrueVal(row[15])) constructionStage = 'Roof Done';
-          else if (isTrueVal(row[16])) constructionStage = 'Plastering Done';
-          else if (isTrueVal(row[17])) constructionStage = 'House Fully Developed';
+          const beneficiaryNumber = row[offset + 0] ? String(row[offset + 0]).trim() : '';
+          const ownerName = row[offset + 1] ? String(row[offset + 1]).trim() : '';
 
-          // 3.2 Occupancy Status resolution
-          let occupancyStatus = 'NOT_APPLICABLE';
-          const occText = row[20] ? String(row[20]).toLowerCase().trim() : '';
-          if (occText.includes('living') || occText.includes('borrower') || occText.includes('පදිංචි')) {
-            occupancyStatus = 'BORROWER_LIVING';
-          } else if (occText.includes('sold') || occText.includes('විකුණා')) {
-            occupancyStatus = 'SOLD';
-          } else if (occText.includes('abandon') || occText.includes('අත්හැර')) {
-            occupancyStatus = 'ABANDONED';
+          if (!beneficiaryNumber && !ownerName) return null;
+
+          const rowErrors = {};
+
+          if (beneficiaryNumber) {
+            const benKey = beneficiaryNumber.toLowerCase();
+            if (seenInBatch[benKey]) {
+              rowErrors['beneficiary_number'] = [`ප්‍රතිලාභී අංකය '${beneficiaryNumber}' මෙම Excel ගොනුවේ Row ${seenInBatch[benKey]} හි දැනටමත් යොදා ඇත. (Duplicate beneficiary number '${beneficiaryNumber}' found in Excel sheet at row ${seenInBatch[benKey]}.)`];
+            } else {
+              seenInBatch[benKey] = idx + 3;
+            }
+          } else {
+            rowErrors['beneficiary_number'] = ['ප්‍රතිලාභී අංකය අනිවාර්ය වේ. (Beneficiary number is required.)'];
           }
 
-          // 3.3 Infrastructure Issues Boolean
-          const hasInfra = (isTrueVal(row[21]) || isTrueVal(row[22]) || isTrueVal(row[23])) ? 1 : 0;
+          if (!ownerName) {
+            rowErrors['owner_name'] = ['ප්‍රතිලාභකරුගේ නම අනිවාර්ය වේ. (Beneficiary full name is required.)'];
+          }
 
-          // Notes with Address combined
-          const address = row[8] ? String(row[8]).trim() : '';
-          const extraNotes = row[24] ? String(row[24]).trim() : '';
-          let finalNotes = '';
-          if (address) finalNotes += `ස්ථිර ලිපිනය: ${address}`;
-          if (extraNotes) finalNotes += `\nසටහන්: ${extraNotes}`;
+          const ownerNic = row[offset + 2] ? String(row[offset + 2]).trim() : '';
+          const ownerContact = row[offset + 3] ? String(row[offset + 3]).trim() : '';
+          const permanentAddress = row[offset + 4] ? String(row[offset + 4]).trim() : '';
+
+          const houseNumber = row[offset + 5] ? String(row[offset + 5]).trim() : '';
+          const landAreaPerches = row[offset + 6] !== '' && !isNaN(Number(row[offset + 6])) ? Number(row[offset + 6]) : null;
+
+          // Single-Select Validation 1: Ownership
+          const ownershipYesCount = [row[offset + 7], row[offset + 8], row[offset + 9]].filter(isTrueVal).length;
+          if (ownershipYesCount > 1) {
+            rowErrors['ownership'] = ['අයිතිය සදහා එක් විකල්පයකට පමණක් YES ඇතුළත් කරන්න. (Please select YES for only ONE ownership option.)'];
+          }
+
+          let ownership = '';
+          if (isTrueVal(row[offset + 7])) ownership = 'NEW';
+          else if (isTrueVal(row[offset + 8])) ownership = 'REPAIR';
+          else if (isTrueVal(row[offset + 9])) ownership = 'RELOCATION';
+
+          // Infrastructure: Col offset + 10 (Water), 11 (Electricity), 12 (Access Roads)
+          const infrastructureIssues = [];
+          if (isTrueVal(row[offset + 10])) infrastructureIssues.push('WATER');
+          if (isTrueVal(row[offset + 11])) infrastructureIssues.push('ELECTRICITY');
+          if (isTrueVal(row[offset + 12])) infrastructureIssues.push('ACCESS_ROADS');
+
+          // Single-Select Validation 2: Construction Stage
+          const stageYesCount = [
+            row[offset + 13], row[offset + 14], row[offset + 15], row[offset + 16],
+            row[offset + 17], row[offset + 18], row[offset + 19], row[offset + 20]
+          ].filter(isTrueVal).length;
+          if (stageYesCount > 1) {
+            rowErrors['construction_stage'] = ['ඉදිකිරීම් ප්‍රගතිය සදහා එක් තත්ත්වයකට පමණක් YES ඇතුළත් කරන්න. (Please select YES for only ONE construction stage option.)'];
+          }
+
+          let constructionStage = 'NOT_STARTED';
+          if (isTrueVal(row[offset + 13])) constructionStage = 'NOT_STARTED';
+          else if (isTrueVal(row[offset + 14])) constructionStage = 'FOUNDATION';
+          else if (isTrueVal(row[offset + 15])) constructionStage = 'WALL';
+          else if (isTrueVal(row[offset + 16])) constructionStage = 'ROOF';
+          else if (isTrueVal(row[offset + 17])) constructionStage = 'FINISHING';
+          else if (isTrueVal(row[offset + 18])) constructionStage = 'FINISHING2';
+          else if (isTrueVal(row[offset + 19])) constructionStage = 'FINISHING3';
+          else if (isTrueVal(row[offset + 20])) constructionStage = 'COMPLETED';
+
+          // Single-Select Validation 3: Current Active Status
+          const statusYesCount = [row[offset + 21], row[offset + 22], row[offset + 23]].filter(isTrueVal).length;
+          if (statusYesCount > 1) {
+            rowErrors['current_status'] = ['වත්මන් ක්‍රියාකාරී තත්ත්වය සදහා එක් විකල්පයකට පමණක් YES ඇතුළත් කරන්න. (Please select YES for only ONE current status option.)'];
+          }
+
+          let currentStatus = '';
+          if (isTrueVal(row[offset + 21])) currentStatus = 'IN_PROGRESS';
+          else if (isTrueVal(row[offset + 22])) currentStatus = 'STOPPED';
+          else if (isTrueVal(row[offset + 23])) currentStatus = 'FINISHED';
+
+          const estimatedValue = row[offset + 24] !== '' && !isNaN(Number(row[offset + 24])) ? Number(row[offset + 24]) : null;
+          const notes = row[offset + 25] ? String(row[offset + 25]).trim() : '';
+
+          // Dynamic Financial Fields
+          let loanAmount = null;
+          let totalPaidSoFar = null;
+          let repaymentStatus = '';
+          let loanNotes = '';
+          let grantAmount = null;
+          let grantNotes = '';
+
+          if (isLoanOnly) {
+            loanAmount = row[offset + 26] !== '' && !isNaN(Number(row[offset + 26])) ? Number(row[offset + 26]) : null;
+            totalPaidSoFar = row[offset + 27] !== '' && !isNaN(Number(row[offset + 27])) ? Number(row[offset + 27]) : null;
+            const rawRepayment = row[offset + 28] ? String(row[offset + 28]).trim().toUpperCase() : '';
+            repaymentStatus = ['PAYING', 'FULLY_PAID', 'DEFAULTED'].includes(rawRepayment) ? rawRepayment : '';
+            loanNotes = row[offset + 29] ? String(row[offset + 29]).trim() : '';
+          } else if (isGrantOnly) {
+            grantAmount = row[offset + 26] !== '' && !isNaN(Number(row[offset + 26])) ? Number(row[offset + 26]) : null;
+            grantNotes = row[offset + 27] ? String(row[offset + 27]).trim() : '';
+          } else {
+            loanAmount = row[offset + 26] !== '' && !isNaN(Number(row[offset + 26])) ? Number(row[offset + 26]) : null;
+            totalPaidSoFar = row[offset + 27] !== '' && !isNaN(Number(row[offset + 27])) ? Number(row[offset + 27]) : null;
+            const rawRepayment = row[offset + 28] ? String(row[offset + 28]).trim().toUpperCase() : '';
+            repaymentStatus = ['PAYING', 'FULLY_PAID', 'DEFAULTED'].includes(rawRepayment) ? rawRepayment : '';
+            loanNotes = row[offset + 29] ? String(row[offset + 29]).trim() : '';
+
+            grantAmount = row[offset + 30] !== '' && !isNaN(Number(row[offset + 30])) ? Number(row[offset + 30]) : null;
+            grantNotes = row[offset + 31] ? String(row[offset + 31]).trim() : '';
+          }
 
           return {
             originalRowIndex: idx + 3,
-            province: row[0] ? String(row[0]).trim() : '',
-            district: row[1] ? String(row[1]).trim() : '',
-            division: row[2] ? String(row[2]).trim() : '',
-            village_name: row[3] ? String(row[3]).trim() : '',
-            house_number: row[4] ? String(row[4]).trim() : '',
-            owner_name: row[5] ? String(row[5]).trim() : '',
-            owner_nic: row[6] ? String(row[6]).trim() : '',
-            owner_contact: row[7] ? String(row[7]).trim() : '',
-            household_members: 1, // Default to 1 member
-            land_area_perches: row[9] !== '' && !isNaN(Number(row[9])) ? Number(row[9]) : null,
+            province: !villageId && row[0] ? String(row[0]).trim() : '',
+            district: !villageId && row[1] ? String(row[1]).trim() : '',
+            division: !villageId && row[2] ? String(row[2]).trim() : '',
+            village_name: !villageId && row[3] ? String(row[3]).trim() : '',
+            beneficiary_number: beneficiaryNumber,
+            owner_name: ownerName,
+            owner_nic: ownerNic,
+            owner_contact: ownerContact,
+            permanent_address: permanentAddress,
+            house_number: houseNumber,
+            land_area_perches: landAreaPerches,
+            ownership: ownership,
+            infrastructure_issues: infrastructureIssues,
             construction_stage: constructionStage,
-            is_land_sold: isTrueVal(row[18]) ? 1 : 0,
-            is_house_sold: isTrueVal(row[19]) ? 1 : 0,
-            occupancy_status: occupancyStatus,
-            has_infrastructure_issues: hasInfra,
-            notes: finalNotes
+            current_status: currentStatus,
+            estimated_value: estimatedValue,
+            notes: notes,
+            loan_amount: loanAmount,
+            total_paid_so_far: totalPaidSoFar,
+            repayment_status: repaymentStatus,
+            loan_notes: loanNotes,
+            grant_amount: grantAmount,
+            grant_notes: grantNotes,
+            _rowErrors: Object.keys(rowErrors).length > 0 ? rowErrors : null
           };
-        }).filter(r => r !== null && r.house_number !== '');
+        }).filter(r => r !== null);
 
         if (mappedRows.length === 0) {
           setErrorMsg('Excel ගොනුවේ වලංගු නිවාස දත්ත කිසිවක් හඳුනාගත නොහැකි විය.');
@@ -294,6 +605,7 @@ const BulkHouseUpload = ({ villageId, onSuccess }) => {
   const downloadErrorExcel = (details) => {
     if (!rawAoa || rawAoa.length === 0) return;
 
+    const config = getHeaders();
     const excelRowDetails = {};
     parsedRows.forEach((row, pIdx) => {
       const payloadKey = String(pIdx + 1);
@@ -304,8 +616,8 @@ const BulkHouseUpload = ({ villageId, onSuccess }) => {
 
     const errorRows = [];
     
-    const newHeaders1 = [...headers1, 'දෝෂ විස්තරය'];
-    const newHeaders2 = [...headers2, 'දෝෂ විස්තරය (Error Message)'];
+    const newHeaders1 = [...config.headers1, 'දෝෂ විස්තරය'];
+    const newHeaders2 = [...config.headers2, 'දෝෂ විස්තරය (Error Message)'];
     
     errorRows.push(newHeaders1);
     errorRows.push(newHeaders2);
@@ -321,36 +633,31 @@ const BulkHouseUpload = ({ villageId, onSuccess }) => {
           .join(' | ');
           
         const errorRow = [...row];
-        while (errorRow.length < 25) {
+        const targetLen = config.headers2.length;
+        while (errorRow.length < targetLen) {
           errorRow.push('');
         }
-        errorRow[25] = errorMessages;
+        errorRow[targetLen] = errorMessages;
         errorRows.push(errorRow);
       }
     });
 
     const ws = XLSX.utils.aoa_to_sheet(errorRows);
 
-    ws['!merges'] = [
-      { s: { r: 0, c: 0 }, e: { r: 0, c: 9 } },
-      { s: { r: 0, c: 10 }, e: { r: 0, c: 17 } },
-      { s: { r: 0, c: 18 }, e: { r: 0, c: 20 } },
-      { s: { r: 0, c: 21 }, e: { r: 0, c: 23 } },
-      { s: { r: 0, c: 24 }, e: { r: 0, c: 24 } }
-    ];
-
+    ws['!merges'] = config.merges;
     ws['!rows'] = [
-      { hpt: 30 },
-      { hpt: 26 }
+      { hpt: 35 },
+      { hpt: 55 }
     ];
 
+    // Freeze top 2 header rows
+    ws['!freeze'] = { xSplit: 0, ySplit: 2, topLeftCell: 'A3', activePane: 'bottomLeft', state: 'frozen' };
+    ws['!views'] = [{ state: 'frozen', xSplit: 0, ySplit: 2, topLeftCell: 'A3', activePane: 'bottomLeft' }];
+
+    const errColIdx = config.headers2.length;
     const sections = [
-      { start: 0, end: 9, color: '4F46E5', subColor: 'EEF2F6', textDark: '1E293B', textLight: 'FFFFFF' },
-      { start: 10, end: 17, color: 'D97706', subColor: 'FEF3C7', textDark: '78350F', textLight: 'FFFFFF' },
-      { start: 18, end: 20, color: '059669', subColor: 'D1FAE5', textDark: '064E3B', textLight: 'FFFFFF' },
-      { start: 21, end: 23, color: '7C3AED', subColor: 'EDE9FE', textDark: '4C1D95', textLight: 'FFFFFF' },
-      { start: 24, end: 24, color: '475569', subColor: 'F1F5F9', textDark: '0F172A', textLight: 'FFFFFF' },
-      { start: 25, end: 25, color: 'DC2626', subColor: 'FEE2E2', textDark: '991B1B', textLight: 'FFFFFF' }
+      ...config.sections,
+      { start: errColIdx, end: errColIdx, color: 'DC2626', subColor: 'FEE2E2', textDark: '991B1B', textLight: 'FFFFFF' }
     ];
 
     sections.forEach((sec) => {
@@ -390,7 +697,7 @@ const BulkHouseUpload = ({ villageId, onSuccess }) => {
     });
 
     for (let r = 2; r < errorRows.length; r++) {
-      const cellRef = `${getColLetter(25)}${r + 1}`;
+      const cellRef = `${getColLetter(errColIdx)}${r + 1}`;
       if (ws[cellRef]) {
         ws[cellRef].s = {
           font: { name: 'Calibri', sz: 9.5, color: { rgb: 'DC2626' }, bold: true },
@@ -400,16 +707,39 @@ const BulkHouseUpload = ({ villageId, onSuccess }) => {
     }
 
     const colWidths = newHeaders2.map((h2, i) => {
-      const h1 = newHeaders1[i] || '';
-      const maxLen = Math.max(h1.length, h2.length, 12);
-      if (i === 25) return { wch: 65 };
-      return { wch: Math.min(Math.max(maxLen + 4, 15), 45) };
+      if (i === errColIdx) return { wch: 55 }; // Error Message column
+      if (villageId) {
+        if (i === 0) return { wch: 22 }; // Beneficiary Number
+        if (i === 1) return { wch: 24 }; // Beneficiary Name
+        if (i === 2) return { wch: 18 }; // NIC
+        if (i === 3) return { wch: 16 }; // Phone
+        if (i === 4) return { wch: 28 }; // Address
+        if (i === 5) return { wch: 18 }; // House Plan No
+        if (i === 6) return { wch: 15 }; // Land Size
+        if (i >= 7 && i <= 23) return { wch: 15 }; // Options
+        if (i === 24) return { wch: 20 }; // Estimated Value
+        if (i === 25) return { wch: 25 }; // Notes
+        return { wch: 20 }; // Financial
+      } else {
+        if (i >= 0 && i <= 3) return { wch: 18 }; // Location
+        if (i === 4) return { wch: 22 }; // Beneficiary Number
+        if (i === 5) return { wch: 24 }; // Beneficiary Name
+        if (i === 6) return { wch: 18 }; // NIC
+        if (i === 7) return { wch: 16 }; // Phone
+        if (i === 8) return { wch: 28 }; // Address
+        if (i === 9) return { wch: 18 }; // House Plan No
+        if (i === 10) return { wch: 15 }; // Land Size
+        if (i >= 11 && i <= 27) return { wch: 15 }; // Options
+        if (i === 28) return { wch: 20 }; // Estimated Value
+        if (i === 29) return { wch: 25 }; // Notes
+        return { wch: 20 }; // Financial
+      }
     });
     ws['!cols'] = colWidths;
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Validation Errors');
-    XLSX.writeFile(wb, 'House_Registration_Errors.xlsx');
+    saveWorkbookWithFreeze(wb, 'House_Registration_Errors.xlsx', 'Validation Errors', 2);
   };
 
   const handleDragOver = (e) => {
@@ -437,20 +767,113 @@ const BulkHouseUpload = ({ villageId, onSuccess }) => {
     }
   };
 
-  // Submit Parsed Array to Transactional API
+  // Submit Parsed Array to Transactional API in 50-row Chunks
   const handleSubmit = async () => {
     if (parsedRows.length === 0) return;
+
+    const CHUNK_SIZE = 50;
+    const totalRows = parsedRows.length;
+    const totalChunks = Math.ceil(totalRows / CHUNK_SIZE);
+    const endpoint = villageId ? `/villages/${villageId}/houses/bulk` : '/houses/bulk';
 
     setSubmitting(true);
     setErrorMsg('');
     setSuccessMsg('');
     setValidationErrors(null);
+    setUploadProgress({
+      currentChunk: 0,
+      totalChunks,
+      processedRows: 0,
+      totalRows,
+    });
 
-    try {
-      const payload = parsedRows.map(({ originalRowIndex, ...rest }) => rest);
-      const response = await api.post('/houses/bulk', payload);
-      setSuccessMsg(response.data.message || `${parsedRows.length} Houses imported successfully!`);
-      
+    let successCount = 0;
+    let accumulatedErrors = {};
+    let hasCriticalError = false;
+
+    // Collect pre-flagged client-side validation errors (e.g. single-select multiple YES selections)
+    parsedRows.forEach((row, pIdx) => {
+      if (row._rowErrors) {
+        const payloadKey = String(pIdx + 1);
+        accumulatedErrors[payloadKey] = row._rowErrors;
+      }
+    });
+
+    for (let c = 0; c < totalChunks; c++) {
+      const startIndex = c * CHUNK_SIZE;
+      const endIndex = Math.min(startIndex + CHUNK_SIZE, totalRows);
+      const chunkRows = parsedRows.slice(startIndex, endIndex);
+
+      setUploadProgress({
+        currentChunk: c + 1,
+        totalChunks,
+        processedRows: endIndex,
+        totalRows,
+      });
+
+      const validChunkItems = chunkRows
+        .map((r, chunkIdx) => ({ r, chunkIdx }))
+        .filter(({ r }) => !r._rowErrors);
+
+      if (validChunkItems.length > 0) {
+        try {
+          const payload = validChunkItems.map(({ r }) => {
+            const { originalRowIndex, _rowErrors, ...rest } = r;
+            return rest;
+          });
+          const res = await api.post(endpoint, payload);
+          const inserted = res.data?.inserted_count !== undefined ? res.data.inserted_count : payload.length;
+          successCount += inserted;
+
+          if (res.data?.details) {
+            const details = res.data.details;
+            Object.keys(details).forEach((cKey) => {
+              const cIdx = parseInt(cKey, 10) - 1;
+              const item = validChunkItems[cIdx];
+              if (item) {
+                const overallIdx = startIndex + item.chunkIdx;
+                const payloadKey = String(overallIdx + 1);
+                accumulatedErrors[payloadKey] = details[cKey];
+              }
+            });
+          }
+        } catch (err) {
+          if (err.response?.data?.details) {
+            const inserted = err.response.data.inserted_count || 0;
+            successCount += inserted;
+
+            const details = err.response.data.details;
+            Object.keys(details).forEach((cKey) => {
+              const cIdx = parseInt(cKey, 10) - 1;
+              const item = validChunkItems[cIdx];
+              if (item) {
+                const overallIdx = startIndex + item.chunkIdx;
+                const payloadKey = String(overallIdx + 1);
+                accumulatedErrors[payloadKey] = details[cKey];
+              }
+            });
+          } else {
+            console.error(`Bulk house submission chunk ${c + 1} critical failure:`, err);
+            setErrorMsg(err.response?.data?.error || `තොග වශයෙන් ඇතුලත් කිරීමේදී කොටසක් (${c + 1}/${totalChunks}) අසාර්ථක විය.`);
+            hasCriticalError = true;
+            break;
+          }
+        }
+      }
+    }
+
+    setSubmitting(false);
+
+    const failedCount = Object.keys(accumulatedErrors).length;
+    if (failedCount > 0) {
+      setValidationErrors(accumulatedErrors);
+      if (successCount > 0) {
+        setErrorMsg(`නිවාස ${successCount} ක් සාර්ථකව පද්ධතියට ඇතුලත් කරන ලදී. දෝෂ සහිත නිවාස ${failedCount} ක් හමුවිය. පහත "Download Error Sheet" බොත්තමෙන් දෝෂ සහිත නිවාස පමණක් අඩංගු Excel ගොනුව බාගත කර නිවැරදි කර නැවත ඇතුලත් කරන්න. නිවසෙහි දෝෂය excel ගොනුවෙහි Error Message තීරුවේ දක්වා ඇත.\nSuccessfully uploaded ${successCount} houses. ${failedCount} houses had errors. Click 'Download Error Sheet' to get an Excel file with only the failed houses. Error is shown in the Error Message column in the Excel file.`);
+      } else {
+        setErrorMsg('ඇතුලත් කිරීමට උත්සාහ කළ සියළු දත්තවල දෝෂ පවතී. කරුණාකර දෝෂ Excel ගොනුව බාගත කර නිවැරදි කර නැවත උත්සාහ කරන්න. \nAll the houses you tried to upload have errors. Please download the error Excel file and correct it and try again.');
+      }
+    } else if (!hasCriticalError) {
+      setSuccessMsg(`සියලුම නිවාස ${successCount} සාර්ථකව ඇතුලත් කරන ලදී! (${successCount} Houses imported successfully!)`);
       if (onSuccess) {
         setTimeout(() => {
           onSuccess();
@@ -467,79 +890,71 @@ const BulkHouseUpload = ({ villageId, onSuccess }) => {
           }
         }, 2000);
       }
-
-    } catch (err) {
-      if (err.response?.status === 400 && err.response?.data?.details) {
-        console.log('Bulk submission input validation failed on server. Displaying error banner.');
-        const details = err.response.data.details;
-        setValidationErrors(details);
-        setErrorMsg('ඇතුලත් කිරීමට උත්සාහ කළ දත්තවල දෝෂ පවතී. කරුණාකර දෝෂ නිවැරදි කර නැවත උත්සාහ කරන්න.');
-      } else {
-        console.error('Bulk submission critical failure:', err);
-        setErrorMsg(err.response?.data?.error || 'තොග වශයෙන් ඇතුලත් කිරීම අසාර්ථක විය. පද්ධති දෝෂයකි.');
-      }
-    } finally {
-      setSubmitting(false);
     }
   };
 
   return (
     <div className="max-w-6xl mx-auto space-y-8 font-sans">
       
-      {/* Grid: Instructions & Template Card */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
-        {/* Step 1 Card: Template Download */}
-        <div className="lg:col-span-1 bg-white rounded-2xl border border-slate-200 p-6 shadow-sm flex flex-col justify-between">
-          <div className="space-y-4">
-            <div className="w-12 h-12 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600">
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-              </svg>
+      {/* 1. Full-Width Guidelines Card at Top */}
+      <div className="bg-slate-900 rounded-2xl p-6 text-slate-100 shadow-md border border-slate-800">
+        <div className="space-y-4">
+          <h3 className="text-sm font-bold tracking-widest text-indigo-400 uppercase">Mandatory Fields & Validation Rules / අනිවාර්ය තොරතුරු සහ රීති</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+            {/* Rule 1: Mandatory Fields */}
+            <div className="space-y-2 bg-slate-850 p-4 rounded-xl border border-slate-800/80">
+              <span className="font-semibold text-amber-400 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> Mandatory Fields (*)
+              </span>
+              <p className="text-white leading-relaxed font-sinhala">
+                ප්‍රතිලාභී අංකය සහ නම අනිවාර්ය වේ. <br />
+                <span className="text-slate-300">Beneficiery number and name are strictly required (*).</span>
+              </p>
             </div>
-            <h3 className="text-lg font-bold text-slate-800">1. Excel Template එක බාගත කරන්න</h3>
-            <p className="text-sm text-slate-500 leading-relaxed font-sinhala">
-              තොග වශයෙන් නිවාස ලියාපදිංචි කිරීමට පෙර පහත ඇති ද්විත්ව පේළි Excel ආකෘතිය (Template) බාගත කරගන්න.
-            </p>
-          </div>
-          <button
-            onClick={handleDownloadTemplate}
-            className="w-full mt-6 py-3 px-4 rounded-xl border border-indigo-200 text-indigo-600 bg-indigo-50/30 hover:bg-indigo-50 font-semibold text-sm transition-all flex items-center justify-center gap-2"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            Download Styled Template
-          </button>
-        </div>
 
-        {/* Guidelines Card */}
-        <div className="lg:col-span-2 bg-slate-900 rounded-2xl p-6 text-slate-100 flex flex-col justify-between shadow-md border border-slate-800">
-          <div className="space-y-4">
-            <h3 className="text-sm font-bold tracking-widest text-indigo-400 uppercase">Guidelines & Restrictions</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-sans">
-              <div className="space-y-2 bg-slate-850 p-4 rounded-xl border border-slate-800/80">
-                <span className="font-semibold text-amber-400 flex items-center gap-1.5 font-sans">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> Progress Selection (ඉදිකිරීම් ප්‍රගතිය)
-                </span>
-                <p className="text-slate-400 leading-relaxed font-sinhala">
-                  ඉදිකිරීම් ප්‍රගති තීරුවලින් (Columns K to R) අදාළ වත්මන් තත්ත්වයට පමණක් <code className="bg-slate-800 px-1 py-0.5 rounded text-indigo-300 font-bold">YES</code> හෝ <code className="bg-slate-800 px-1 py-0.5 rounded text-indigo-300 font-bold">ඔව්</code> ඇතුලත් කරන්න.
-                </p>
-              </div>
-              <div className="space-y-2 bg-slate-850 p-4 rounded-xl border border-slate-800/80 font-sans">
-                <span className="font-semibold text-indigo-400 flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" /> Infrastructure Details
-                </span>
-                <p className="text-slate-400 leading-relaxed font-sinhala">
-                  ජලය, විදුලිය හෝ ප්‍රවේශ මාර්ග යන යටිතල පහසුකම් පවතීනම් <code className="bg-slate-800 px-1 py-0.5 rounded text-indigo-300 font-bold">YES</code> හෝ <code className="bg-slate-800 px-1 py-0.5 rounded text-indigo-300 font-bold">ඔව්</code> ඇතුලත් කරන්න.
-                </p>
-              </div>
+            {/* Rule 2: Multiple Choice Inputs */}
+            <div className="space-y-2 bg-slate-850 p-4 rounded-xl border border-slate-800/80">
+              <span className="font-semibold text-indigo-400 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" /> Multiple Choice Option Inputs
+              </span>
+              <p className="text-white leading-relaxed font-sinhala">
+                බහුතේරීම් තීරූ සඳහා අදාළ තීරු වලට පමණක් "YES" ලෙස ඇතුළත් කර අදාළ නොවන තීරූ හිස්ව තබන්න.
+                (උදා: ඉදිකිරීම් තත්වය සදහන් කිරීමේදී, අත්තිවාරම පමණක් ඇත්නම් "අත්තිවාරම දමා ඇත" තීරුවේ YES ලෙසද, අනික් තීරූ හිස්වද තබන්න)<br />
+                <span className="text-slate-300">For multiple choice columns, enter YES in relevant column and leave others blank. (Ex - When recording construction progress, if only the foundation is laid, enter YES in the "Foundation Complete" column and leave the other columns blank.)</span>
+              </p>
+            </div>
+
+            {/* Rule 3: Sample Row Reference */}
+            <div className="space-y-2 bg-slate-850 p-4 rounded-xl border border-slate-800/80">
+              <span className="font-semibold text-emerald-400 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> Example Row
+              </span>
+              <p className="text-white leading-relaxed font-sinhala">
+                Excel ගොනුවේ 3 වන පේළියෙහි උදාහණයක් අඩංගු වේ. එය ආදර්ශයට ගෙන ඔබේ දත්ත ඇතුළත් කිරීමෙන් පසු එම 3 වන පේළිය ඉවත් කරන්න. <br />
+                <span className="text-slate-300">Row 3 contains an example. Use it as a guide and delete Row 3 before saving and uploading your file.</span>
+              </p>
             </div>
           </div>
-          <div className="text-[10px] text-slate-500 font-semibold mt-4">
-            * Note: NIC validation checks are strictly executed on both backend and frontend.
-          </div>
         </div>
+      </div>
+
+      {/* 2. Step 1: Download Excel Template Card */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6">
+        <div className="space-y-1">
+          <h3 className="text-lg font-bold text-slate-800">1. Download Excel Template</h3>  
+          <p className="text-sm text-slate-600 leading-relaxed font-sinhala">
+            බාගත කරගත් Excel ගොනුවේ Row 3 සිට අලුත් නිවාස දත්ත ඇතුලත් කරන්න. (Enter new house details starting from Row 3 in Excel sheet).
+          </p>
+        </div>
+        <button
+          onClick={handleDownloadTemplate}
+          className="w-full md:w-auto px-6 py-3.5 rounded-xl border border-indigo-200 text-indigo-600 bg-indigo-50/40 hover:bg-indigo-50 font-bold text-sm transition-all flex items-center justify-center gap-2.5 flex-shrink-0 shadow-sm"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          Download Excel Template
+        </button>
       </div>
 
       {/* Upload Drag & Drop Section */}
@@ -617,15 +1032,7 @@ const BulkHouseUpload = ({ villageId, onSuccess }) => {
                     </div>
                     <div className="flex-1">
                       <h3 className="font-bold text-rose-800">Registration Denied (ඇතුලත් කිරීම ප්‍රතික්ෂේප විය)</h3>
-                      <p className="text-sm text-rose-700 mt-1 font-medium leading-relaxed">{errorMsg}</p>
-                      <p className="text-xs text-slate-500 mt-1.5 leading-relaxed font-sans">
-                        Uploaded File: <span className="font-semibold text-slate-700">{fileName}</span>
-                      </p>
-                      {validationErrors && (
-                        <p className="text-xs text-rose-600 font-semibold mt-2 font-sinhala">
-                          ඇතුලත් කිරීමට උත්සාහ කළ ගොනුවේ දෝෂ පවතී. දෝෂ පිළිබඳ විස්තර බැලීමට කරුණාකර පහත බොත්තමෙන් නිවැරදි කිරීම් සහිත Excel ගොනුව බාගත කරගන්න.
-                        </p>
-                      )}
+                      <p className="text-sm text-rose-700 mt-1 font-medium leading-relaxed whitespace-pre-line">{errorMsg}</p>
                     </div>
                   </div>
 
@@ -661,13 +1068,26 @@ const BulkHouseUpload = ({ villageId, onSuccess }) => {
 
               {/* SUBMITTING STATE */}
               {submitting && (
-                <div className="rounded-2xl bg-indigo-50 border border-indigo-100 p-6 flex items-start gap-4 shadow-sm animate-pulse">
-                  <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 flex-shrink-0">
-                    <div className="w-5 h-5 border-2 border-indigo-300 border-t-indigo-600 rounded-full animate-spin" />
+                <div className="rounded-2xl bg-indigo-50 border border-indigo-100 p-6 space-y-4 shadow-sm">
+                  <div className="flex items-start gap-4">
+                    <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 flex-shrink-0 mt-0.5">
+                      <div className="w-5 h-5 border-2 border-indigo-300 border-t-indigo-600 rounded-full animate-spin" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="font-bold text-indigo-900">
+                        Submitting Houses (නිවාස ඇතුලත් කරමින්...) - Chunk {uploadProgress.currentChunk} of {uploadProgress.totalChunks}
+                      </h3>
+                      <p className="text-sm text-indigo-700 mt-1 font-medium font-sans">
+                        Progress: {uploadProgress.processedRows} / {uploadProgress.totalRows} rows processed ({Math.round((uploadProgress.processedRows / (uploadProgress.totalRows || 1)) * 100)}%)
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="font-bold text-indigo-800">Submitting Houses (නිවාස ඇතුලත් කරමින්...)</h3>
-                    <p className="text-sm text-indigo-600 mt-1 font-medium font-sinhala">කරුණාකර මෙම පිටුව වසා දැමීමෙන් හෝ refresh කිරීමෙන් වලකින්න.</p>
+                  {/* Progress Bar */}
+                  <div className="w-full bg-indigo-200/60 rounded-full h-2.5 overflow-hidden">
+                    <div
+                      className="bg-indigo-600 h-2.5 rounded-full transition-all duration-300 ease-out"
+                      style={{ width: `${Math.round((uploadProgress.processedRows / (uploadProgress.totalRows || 1)) * 100)}%` }}
+                    />
                   </div>
                 </div>
               )}

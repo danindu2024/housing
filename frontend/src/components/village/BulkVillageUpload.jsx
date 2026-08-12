@@ -1,7 +1,48 @@
 import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import XLSX from 'xlsx-js-style';
+import { unzipSync, zipSync, strFromU8, strToU8 } from 'fflate';
 import api from '../../api/axios';
+
+const saveWorkbookWithFreeze = (wb, fileName, sheetName, ySplitRows = 2) => {
+  const wbOut = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+
+  try {
+    const unzipped = unzipSync(new Uint8Array(wbOut));
+    const sheetPath = 'xl/worksheets/sheet1.xml';
+
+    if (unzipped[sheetPath]) {
+      let sheetXml = strFromU8(unzipped[sheetPath]);
+      const paneXml = `<pane ySplit="${ySplitRows}" topLeftCell="A${ySplitRows + 1}" activePane="bottomLeft" state="frozen"/>`;
+
+      if (sheetXml.includes('<sheetViews>')) {
+        if (sheetXml.includes('<sheetView')) {
+          sheetXml = sheetXml.replace(/<sheetView([^>]*)\/>/g, `<sheetView$1>${paneXml}</sheetView>`);
+          sheetXml = sheetXml.replace(/(<sheetView[^>]*>)(?![\s\S]*?<pane)/g, `$1${paneXml}`);
+        }
+      } else {
+        const sheetViewsTag = `<sheetViews><sheetView workbookViewId="0">${paneXml}</sheetView></sheetViews>`;
+        sheetXml = sheetXml.replace(/(<worksheet[^>]*>)/, `$1${sheetViewsTag}`);
+      }
+
+      unzipped[sheetPath] = strToU8(sheetXml);
+    }
+
+    const modifiedZip = zipSync(unzipped);
+    const blob = new Blob([modifiedZip], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    console.error('Freeze pane patch fallback:', e);
+    XLSX.writeFile(wb, fileName);
+  }
+};
 
 const BulkVillageUpload = () => {
   const navigate = useNavigate();
@@ -131,6 +172,10 @@ const BulkVillageUpload = () => {
       { hpt: 55 }  // Subtitles Row 2 (High enough for 3-4 lines of wrapped bilingual text)
     ];
 
+    // Freeze top 2 header rows
+    ws['!freeze'] = { xSplit: 0, ySplit: 2, topLeftCell: 'A3', activePane: 'bottomLeft', state: 'frozen' };
+    ws['!views'] = [{ state: 'frozen', xSplit: 0, ySplit: 2, topLeftCell: 'A3', activePane: 'bottomLeft' }];
+
 
     // Style Groups with color-coded palettes
     const sections = [
@@ -219,7 +264,7 @@ const BulkVillageUpload = () => {
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Village Template');
-    XLSX.writeFile(wb, 'Village_Bulk_Registration_Template.xlsx');
+    saveWorkbookWithFreeze(wb, 'Village_Bulk_Registration_Template.xlsx', 'Village Template', 2);
   };
 
   // 3. Process the file data from Row 3 onwards (Browser Side)
@@ -262,10 +307,24 @@ const BulkVillageUpload = () => {
         const mappedRows = dataRows.map((row, idx) => {
           if (!row || row.length === 0 || (row[0] === '' && row[1] === '')) return null;
 
+          const rowErrors = {};
+
+          // Single-Select Validation 1: Funding Category
+          const categoryYesCount = [row[6], row[7], row[8]].filter(isTrueVal).length;
+          if (categoryYesCount > 1) {
+            rowErrors['category_code'] = ['මුදල් සම්ප්‍රාදන ක්‍රමය සදහා එක් විකල්පයකට පමණක් YES ඇතුළත් කරන්න. (Please select YES for only ONE funding category option.)'];
+          }
+
           let categoryCode = '';
           if (isTrueVal(row[6])) categoryCode = 'LOAN';
           else if (isTrueVal(row[7])) categoryCode = 'GRANT_INDIAN';
           else if (isTrueVal(row[8])) categoryCode = 'GRANT_HOUSING';
+
+          // Single-Select Validation 2: Land Ownership Body
+          const ownershipYesCount = [row[9], row[10], row[11], row[12], row[13], row[14], row[15]].filter(isTrueVal).length;
+          if (ownershipYesCount > 1) {
+            rowErrors['ownership_body_code'] = ['ඉඩමේ හිමිකාරීත්වය සදහා එක් ආයතනයකට පමණක් YES ඇතුළත් කරන්න. (Please select YES for only ONE land ownership body option.)'];
+          }
 
           let ownershipBodyCode = '';
           if (isTrueVal(row[9])) ownershipBodyCode = 'DS_DIVISION';
@@ -276,6 +335,12 @@ const BulkVillageUpload = () => {
           else if (isTrueVal(row[14])) ownershipBodyCode = 'PRIVATE';
           else if (isTrueVal(row[15])) ownershipBodyCode = 'PRIVATE_STATE';
 
+          // Single-Select Validation 3: Boundary Type
+          const boundaryYesCount = [row[16], row[17], row[18], row[19]].filter(isTrueVal).length;
+          if (boundaryYesCount > 1) {
+            rowErrors['boundary_type'] = ['ගමේ පිහිටීමේ සීමාව සදහා එක් විකල්පයකට පමණක් YES ඇතුළත් කරන්න. (Please select YES for only ONE boundary option.)'];
+          }
+
           let boundaryType = '';
           if (isTrueVal(row[16])) boundaryType = 'MUNICIPAL';
           else if (isTrueVal(row[17])) boundaryType = 'URBAN';
@@ -285,12 +350,19 @@ const BulkVillageUpload = () => {
           const rawStatus = row[20] ? String(row[20]).trim().toUpperCase() : '';
           const status = (rawStatus === 'YES' || rawStatus === 'OPEN') ? 'OPEN' : ((rawStatus === 'NO' || rawStatus === 'CLOSED') ? 'CLOSED' : '');
 
+          // Infrastructure (Multi-select allowed)
           const infrastructureIssues = [];
           if (isTrueVal(row[21])) infrastructureIssues.push('WATER');
           if (isTrueVal(row[22])) infrastructureIssues.push('ELECTRICITY');
           if (isTrueVal(row[23])) infrastructureIssues.push('ACCESS_ROADS');
           if (isTrueVal(row[24])) infrastructureIssues.push('INTERNAL_ROADS');
           if (isTrueVal(row[25])) infrastructureIssues.push('OTHER');
+
+          // Single-Select Validation 4: Conservation Area
+          const conservationYesCount = [row[26], row[27], row[28], row[29], row[30], row[31], row[32]].filter(isTrueVal).length;
+          if (conservationYesCount > 1) {
+            rowErrors['is_conservation_area'] = ['සංරක්ෂිත භූමි සදහා එක් විකල්පයකට පමණක් YES ඇතුළත් කරන්න. (Please select YES for only ONE conservation area option.)'];
+          }
 
           let isConservationArea = 'NONE';
           if (isTrueVal(row[26])) isConservationArea = 'NONE';
@@ -327,7 +399,8 @@ const BulkVillageUpload = () => {
             infrastructure_issues: infrastructureIssues,
             total_planned_houses: row[33] !== '' && !isNaN(Number(row[33])) ? Number(row[33]) : null,
             program_start_date: programStartDate,
-            notes: row[35] ? String(row[35]).trim() : ''
+            notes: row[35] ? String(row[35]).trim() : '',
+            _rowErrors: Object.keys(rowErrors).length > 0 ? rowErrors : null
           };
         }).filter(r => r !== null && r.name !== '');
 
@@ -406,6 +479,10 @@ const BulkVillageUpload = () => {
       { hpt: 35 },
       { hpt: 55 }
     ];
+
+    // Freeze top 2 header rows
+    ws['!freeze'] = { xSplit: 0, ySplit: 2, topLeftCell: 'A3', activePane: 'bottomLeft', state: 'frozen' };
+    ws['!views'] = [{ state: 'frozen', xSplit: 0, ySplit: 2, topLeftCell: 'A3', activePane: 'bottomLeft' }];
 
 
     const sections = [
@@ -489,7 +566,7 @@ const BulkVillageUpload = () => {
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Validation Errors');
-    XLSX.writeFile(wb, 'Village_Registration_Errors.xlsx');
+    saveWorkbookWithFreeze(wb, 'Village_Registration_Errors.xlsx', 'Validation Errors', 2);
   };
 
   // Drag & Drop Handlers
@@ -541,6 +618,14 @@ const BulkVillageUpload = () => {
     let accumulatedErrors = {};
     let hasCriticalError = false;
 
+    // Collect pre-flagged client-side validation errors (e.g. single-select multiple YES selections)
+    parsedRows.forEach((row, pIdx) => {
+      if (row._rowErrors) {
+        const payloadKey = String(pIdx + 1);
+        accumulatedErrors[payloadKey] = row._rowErrors;
+      }
+    });
+
     for (let c = 0; c < totalChunks; c++) {
       const startIndex = c * CHUNK_SIZE;
       const endIndex = Math.min(startIndex + CHUNK_SIZE, totalRows);
@@ -553,38 +638,53 @@ const BulkVillageUpload = () => {
         totalRows,
       });
 
-      try {
-        const payload = chunkRows.map(({ originalRowIndex, ...rest }) => rest);
-        const res = await api.post('/villages/bulk', payload);
-        const inserted = res.data?.inserted_count !== undefined ? res.data.inserted_count : chunkRows.length;
-        successCount += inserted;
+      const validChunkItems = chunkRows
+        .map((r, chunkIdx) => ({ r, chunkIdx }))
+        .filter(({ r }) => !r._rowErrors);
 
-        if (res.data?.details) {
-          const details = res.data.details;
-          Object.keys(details).forEach((chunkKey) => {
-            const chunkIdx = parseInt(chunkKey, 10) - 1;
-            const overallIdx = startIndex + chunkIdx;
-            const payloadKey = String(overallIdx + 1);
-            accumulatedErrors[payloadKey] = details[chunkKey];
+      if (validChunkItems.length > 0) {
+        try {
+          const payload = validChunkItems.map(({ r }) => {
+            const { originalRowIndex, _rowErrors, ...rest } = r;
+            return rest;
           });
-        }
-      } catch (err) {
-        if (err.response?.data?.details) {
-          const inserted = err.response.data.inserted_count || 0;
+          const res = await api.post('/villages/bulk', payload);
+          const inserted = res.data?.inserted_count !== undefined ? res.data.inserted_count : payload.length;
           successCount += inserted;
 
-          const details = err.response.data.details;
-          Object.keys(details).forEach((chunkKey) => {
-            const chunkIdx = parseInt(chunkKey, 10) - 1;
-            const overallIdx = startIndex + chunkIdx;
-            const payloadKey = String(overallIdx + 1);
-            accumulatedErrors[payloadKey] = details[chunkKey];
-          });
-        } else {
-          console.error(`Bulk submission chunk ${c + 1} critical failure:`, err);
-          setErrorMsg(err.response?.data?.error || `තොග වශයෙන් ඇතුලත් කිරීමේදී කොටසක් (${c + 1}/${totalChunks}) අසාර්ථක විය.`);
-          hasCriticalError = true;
-          break;
+          if (res.data?.details) {
+            const details = res.data.details;
+            Object.keys(details).forEach((cKey) => {
+              const cIdx = parseInt(cKey, 10) - 1;
+              const item = validChunkItems[cIdx];
+              if (item) {
+                const overallIdx = startIndex + item.chunkIdx;
+                const payloadKey = String(overallIdx + 1);
+                accumulatedErrors[payloadKey] = details[cKey];
+              }
+            });
+          }
+        } catch (err) {
+          if (err.response?.data?.details) {
+            const inserted = err.response.data.inserted_count || 0;
+            successCount += inserted;
+
+            const details = err.response.data.details;
+            Object.keys(details).forEach((cKey) => {
+              const cIdx = parseInt(cKey, 10) - 1;
+              const item = validChunkItems[cIdx];
+              if (item) {
+                const overallIdx = startIndex + item.chunkIdx;
+                const payloadKey = String(overallIdx + 1);
+                accumulatedErrors[payloadKey] = details[cKey];
+              }
+            });
+          } else {
+            console.error(`Bulk submission chunk ${c + 1} critical failure:`, err);
+            setErrorMsg(err.response?.data?.error || `තොග වශයෙන් ඇතුලත් කිරීමේදී කොටසක් (${c + 1}/${totalChunks}) අසාර්ථක විය.`);
+            hasCriticalError = true;
+            break;
+          }
         }
       }
     }

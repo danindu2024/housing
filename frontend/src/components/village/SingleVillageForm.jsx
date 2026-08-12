@@ -825,7 +825,7 @@ const SingleVillageForm = ({ isEditMode: propIsEditMode }) => {
         <div className="p-8 border-t border-slate-100 bg-slate-50/30 flex justify-end gap-4">
           <button
             type="button"
-            onClick={() => navigate('/villages')}
+            onClick={() => navigate(isEditMode && id ? `/villages/${id}` : '/villages')}
             className="px-6 py-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50 hover:text-slate-800 transition-colors"
           >
             Cancel

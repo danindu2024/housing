@@ -61,9 +61,9 @@ class LoanController {
         }
 
         // Repayment status validation
-        $repaymentStatus = isset($body['repayment_status']) ? strtoupper(trim($body['repayment_status'])) : 'NOT_PAID';
+        $repaymentStatus = !empty($body['repayment_status']) ? strtoupper(trim($body['repayment_status'])) : null;
         $validStatuses = ['NOT_PAID', 'PARTIALLY_PAID', 'PAYING', 'FULLY_PAID', 'DEFAULTED'];
-        if (!in_array($repaymentStatus, $validStatuses, true)) {
+        if ($repaymentStatus !== null && !in_array($repaymentStatus, $validStatuses, true)) {
             $errors['repayment_status'][] = 'Invalid repayment status specified.';
         }
 
