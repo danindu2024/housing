@@ -315,12 +315,16 @@ const VillageDetailPage = () => {
             </span>
             <div>
               {village.status === 'OPEN' ? (
-                <p className="text-xs font-bold text-slate-800">
+                <p className="text-xs font-bold text-slate-800 uppercase tracking-wider">
                   විවෘතයි (Open)
                 </p>
-              ) : (
-                <p className="text-xs font-bold text-slate-800">
+              ) : village.status === 'CLOSED' ? (
+                <p className="text-xs font-bold text-slate-800 uppercase tracking-wider">
                   විවෘත කර නැත (Closed)
+                </p>
+              ) : (
+                <p className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                  සටහන් කර නැත (N/A)
                 </p>
               )}
             </div>
