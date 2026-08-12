@@ -205,6 +205,13 @@ const VillageListPage = () => {
   };
 
   const getStatusBadge = (statusVal) => {
+    if (!statusVal || statusVal === 'N/A') {
+      return (
+        <span className="px-3 py-1.5 rounded-xl text-xs font-bold border border-slate-200 bg-slate-50 text-slate-500 uppercase tracking-wider inline-block">
+          N/A
+        </span>
+      );
+    }
     const badges = {
       OPEN: 'bg-emerald-50/70 text-emerald-700 border-emerald-100/80 shadow-sm',
       CLOSED: 'bg-rose-50/70 text-rose-700 border-rose-100/80 shadow-sm',
