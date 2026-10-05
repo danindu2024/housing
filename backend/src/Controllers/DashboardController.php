@@ -33,6 +33,40 @@ class DashboardController {
             $bindings['ownership_body_id'] = (int)$filters['ownership_body_id'];
         }
 
+        // Multi-select Infrastructure Facilities Filter (All selected facilities must be present)
+        $infraList = [];
+        if (!empty($filters['infrastructure'])) {
+            $infraList = is_array($filters['infrastructure']) ? $filters['infrastructure'] : explode(',', $filters['infrastructure']);
+        } elseif (!empty($filters['infrastructure_facilities'])) {
+            $infraList = is_array($filters['infrastructure_facilities']) ? $filters['infrastructure_facilities'] : explode(',', $filters['infrastructure_facilities']);
+        } elseif (!empty($filters['infrastructure_issues'])) {
+            $infraList = is_array($filters['infrastructure_issues']) ? $filters['infrastructure_issues'] : explode(',', $filters['infrastructure_issues']);
+        }
+
+        $infraList = array_values(array_filter(array_map('trim', $infraList)));
+
+        // Check if user specifically requested villages with NO facilities
+        if (in_array('NONE', $infraList) || in_array('NO_FACILITIES', $infraList)) {
+            $where .= " AND (
+                v.infrastructure_issues IS NULL 
+                OR v.infrastructure_issues = '' 
+                OR v.infrastructure_issues = '[]'
+                OR (JSON_VALID(v.infrastructure_issues) = 1 AND JSON_LENGTH(v.infrastructure_issues) = 0)
+            )";
+        } else {
+            foreach ($infraList as $idx => $item) {
+                if (empty($item)) continue;
+                $paramJson = "infra_json_{$idx}";
+                $paramLike = "infra_like_{$idx}";
+                $where .= " AND (
+                    (v.infrastructure_issues IS NOT NULL AND JSON_VALID(v.infrastructure_issues) = 1 AND JSON_CONTAINS(v.infrastructure_issues, :{$paramJson}))
+                    OR v.infrastructure_issues LIKE :{$paramLike}
+                )";
+                $bindings[$paramJson] = json_encode($item);
+                $bindings[$paramLike] = '%' . $item . '%';
+            }
+        }
+
         return $where;
     }
 
@@ -53,7 +87,8 @@ class DashboardController {
                     SUM(CASE WHEN v.status = 'CLOSED' THEN 1 ELSE 0 END) as status_closed,
                     SUM(v.total_planned_houses) as total_planned_houses,
                     SUM(CASE WHEN v.is_conservation_area <> 'NONE' THEN 1 ELSE 0 END) as conservation_area_villages,
-                    SUM(CASE WHEN (v.infrastructure_issues IS NOT NULL AND v.infrastructure_issues <> '[]' AND v.infrastructure_issues <> '') THEN 1 ELSE 0 END) as infra_issue_villages
+                    SUM(CASE WHEN (v.infrastructure_issues IS NOT NULL AND v.infrastructure_issues <> '[]' AND v.infrastructure_issues <> '' AND (JSON_VALID(v.infrastructure_issues) = 0 OR JSON_LENGTH(v.infrastructure_issues) > 0)) THEN 1 ELSE 0 END) as infra_issue_villages,
+                    SUM(CASE WHEN (v.infrastructure_issues IS NULL OR v.infrastructure_issues = '[]' OR v.infrastructure_issues = '' OR (JSON_VALID(v.infrastructure_issues) = 1 AND JSON_LENGTH(v.infrastructure_issues) = 0)) THEN 1 ELSE 0 END) as no_infra_villages
                 FROM village v
                 JOIN village_category vc ON v.category_id = vc.id
                 JOIN division dv ON v.division_id = dv.id
@@ -193,6 +228,7 @@ class DashboardController {
                 'land_issues' => [
                     'conservation_area_villages' => (int)($vStats['conservation_area_villages'] ?? 0),
                     'infrastructure_issue_villages' => (int)($vStats['infra_issue_villages'] ?? 0),
+                    'no_infrastructure_villages' => (int)($vStats['no_infra_villages'] ?? 0),
                     'land_sold_houses' => (int)($hStats['land_sold'] ?? 0),
                     'house_sold_houses' => (int)($hStats['house_sold'] ?? 0)
                 ]

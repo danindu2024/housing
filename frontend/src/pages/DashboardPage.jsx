@@ -14,6 +14,14 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 
+const INFRASTRUCTURE_FACILITIES = [
+  { value: 'WATER', label: 'ජලය (Water)' },
+  { value: 'ELECTRICITY', label: 'විදුලිය (Electricity)' },
+  { value: 'ACCESS_ROADS', label: 'ගමට ප්‍රවේශ මාර්ග (Access Roads)' },
+  { value: 'INTERNAL_ROADS', label: 'අභ්‍යන්තර මාර්ග (Internal Roads)' },
+  { value: 'OTHER', label: 'වෙනත් පොදු පහසුකම් (Other Facilities)' },
+];
+
 const DashboardPage = () => {
   // Filters State
   const [selectedProvince, setSelectedProvince] = useState('');
@@ -22,6 +30,7 @@ const DashboardPage = () => {
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
   const [selectedOwnership, setSelectedOwnership] = useState('');
+  const [selectedInfrastructure, setSelectedInfrastructure] = useState([]);
 
   // Lookup Reference Data
   const [provinces, setProvinces] = useState([]);
@@ -98,6 +107,9 @@ const DashboardPage = () => {
       if (selectedCategory) params.category = selectedCategory;
       if (selectedStatus) params.status = selectedStatus;
       if (selectedOwnership) params.ownership_body_id = selectedOwnership;
+      if (selectedInfrastructure.length > 0) {
+        params.infrastructure = selectedInfrastructure.join(',');
+      }
 
       const [summaryRes, progressRes] = await Promise.all([
         api.get('/dashboard/summary', { params }),
@@ -123,7 +135,24 @@ const DashboardPage = () => {
     selectedCategory,
     selectedStatus,
     selectedOwnership,
+    selectedInfrastructure,
   ]);
+
+  // Handle Infrastructure Multi-Select Toggle
+  const handleInfrastructureToggle = (value) => {
+    setSelectedInfrastructure((prev) => {
+      if (value === 'NONE') {
+        // Toggling 'NONE' isolates villages without facilities, deselecting all specific facilities
+        return prev.includes('NONE') ? [] : ['NONE'];
+      } else {
+        // Toggling a specific facility deselects 'NONE' if it was active
+        const withoutNone = prev.filter((item) => item !== 'NONE');
+        return withoutNone.includes(value)
+          ? withoutNone.filter((item) => item !== value)
+          : [...withoutNone, value];
+      }
+    });
+  };
 
   // Reset Filters handler
   const resetFilters = () => {
@@ -133,6 +162,7 @@ const DashboardPage = () => {
     setSelectedCategory('');
     setSelectedStatus('');
     setSelectedOwnership('');
+    setSelectedInfrastructure([]);
   };
 
   // Helper to format currency
@@ -333,6 +363,79 @@ const DashboardPage = () => {
                 </option>
               ))}
             </select>
+          </div>
+        </div>
+
+        {/* Infrastructure Facilities Checkboxes Filter */}
+        <div className="pt-4 border-t border-slate-100 space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
+                <svg className="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                </svg>
+                Infrastructure Facilities / යටිතල පහසුකම්
+              </label>
+              {selectedInfrastructure.includes('NONE') ? (
+                <span className="text-[11px] font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                  <span>🚫</span> Filtering: No facilities recorded
+                </span>
+              ) : selectedInfrastructure.length > 0 ? (
+                <span className="text-[11px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 rounded-full">
+                  {selectedInfrastructure.length} selected (All must match)
+                </span>
+              ) : (
+                <span className="text-[11px] font-medium text-slate-400 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-full">
+                  Showing all villages
+                </span>
+              )}
+            </div>
+            <span className="text-[11px] text-slate-400 font-medium">
+              Select facilities to match, or choose "No Facilities" for underdeveloped villages
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5">
+            {INFRASTRUCTURE_FACILITIES.map((opt) => {
+              const isChecked = selectedInfrastructure.includes(opt.value);
+              return (
+                <label
+                  key={opt.value}
+                  className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl border text-xs font-medium cursor-pointer transition-all select-none ${
+                    isChecked
+                      ? 'bg-indigo-50/80 border-indigo-400 text-indigo-900 shadow-sm font-semibold'
+                      : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 hover:border-slate-300'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    value={opt.value}
+                    checked={isChecked}
+                    onChange={() => handleInfrastructureToggle(opt.value)}
+                    className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer transition-all"
+                  />
+                  <span className="truncate">{opt.label}</span>
+                </label>
+              );
+            })}
+
+            {/* Mutually Exclusive "No Facilities" Option */}
+            <label
+              className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl border text-xs font-medium cursor-pointer transition-all select-none ${
+                selectedInfrastructure.includes('NONE')
+                  ? 'bg-rose-50 border-rose-400 text-rose-900 shadow-sm font-bold ring-1 ring-rose-400'
+                  : 'bg-rose-50/30 border-rose-200/80 text-rose-700 hover:bg-rose-50 hover:border-rose-300'
+              }`}
+            >
+              <input
+                type="checkbox"
+                value="NONE"
+                checked={selectedInfrastructure.includes('NONE')}
+                onChange={() => handleInfrastructureToggle('NONE')}
+                className="w-4 h-4 rounded border-rose-300 text-rose-600 focus:ring-rose-500 cursor-pointer transition-all"
+              />
+              <span className="truncate font-semibold">🚫 පහසුකම් නැත (None)</span>
+            </label>
           </div>
         </div>
       </div>
@@ -596,14 +699,18 @@ const DashboardPage = () => {
               <p className="text-xs text-slate-400">Environmental conservation violations and residency statuses</p>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 pt-2">
               <div className="bg-rose-50/40 rounded-2xl p-3 border border-rose-100/50 flex flex-col justify-between">
-                <span className="text-[10px] font-bold text-rose-600/90 uppercase tracking-wider">Conservation Zones</span>
+                <span className="text-[10px] font-bold text-rose-600/90 uppercase tracking-wider">Conservation</span>
                 <span className="text-lg font-black text-rose-700 mt-1">{summaryData?.land_issues.conservation_area_villages || 0}</span>
               </div>
+              <div className="bg-emerald-50/40 rounded-2xl p-3 border border-emerald-100/50 flex flex-col justify-between">
+                <span className="text-[10px] font-bold text-emerald-600/90 uppercase tracking-wider">With Facilities</span>
+                <span className="text-lg font-black text-emerald-700 mt-1">{summaryData?.land_issues.infrastructure_issue_villages || 0}</span>
+              </div>
               <div className="bg-amber-50/40 rounded-2xl p-3 border border-amber-100/50 flex flex-col justify-between">
-                <span className="text-[10px] font-bold text-amber-600/90 uppercase tracking-wider">Infra Issues</span>
-                <span className="text-lg font-black text-amber-700 mt-1">{summaryData?.land_issues.infrastructure_issue_villages || 0}</span>
+                <span className="text-[10px] font-bold text-amber-600/90 uppercase tracking-wider">No Facilities</span>
+                <span className="text-lg font-black text-amber-700 mt-1">{summaryData?.land_issues.no_infrastructure_villages || 0}</span>
               </div>
               <div className="bg-slate-50 rounded-2xl p-3 border border-slate-100 flex flex-col justify-between">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Land Sold</span>
