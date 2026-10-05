@@ -77,9 +77,40 @@ class VillageController {
                     $bindings['conservation'] = $filters['is_conservation_area'];
                 }
             }
-            if (isset($filters['infrastructure_issue']) && $filters['infrastructure_issue'] !== '') {
-                $where .= ' AND JSON_CONTAINS(v.infrastructure_issues, :infra_issue)';
-                $bindings['infra_issue'] = '"' . $filters['infrastructure_issue'] . '"';
+            // Multi-select Infrastructure Facilities Filter
+            $infraList = [];
+            if (!empty($filters['infrastructure'])) {
+                $infraList = is_array($filters['infrastructure']) ? $filters['infrastructure'] : explode(',', $filters['infrastructure']);
+            } elseif (!empty($filters['infrastructure_facilities'])) {
+                $infraList = is_array($filters['infrastructure_facilities']) ? $filters['infrastructure_facilities'] : explode(',', $filters['infrastructure_facilities']);
+            } elseif (!empty($filters['infrastructure_issues'])) {
+                $infraList = is_array($filters['infrastructure_issues']) ? $filters['infrastructure_issues'] : explode(',', $filters['infrastructure_issues']);
+            } elseif (!empty($filters['infrastructure_issue'])) {
+                $infraList = [$filters['infrastructure_issue']];
+            }
+
+            $infraList = array_values(array_filter(array_map('trim', $infraList)));
+
+            // Check if user specifically requested villages with NO facilities
+            if (in_array('NONE', $infraList) || in_array('NO_FACILITIES', $infraList)) {
+                $where .= " AND (
+                    v.infrastructure_issues IS NULL 
+                    OR v.infrastructure_issues = '' 
+                    OR v.infrastructure_issues = '[]'
+                    OR (JSON_VALID(v.infrastructure_issues) = 1 AND JSON_LENGTH(v.infrastructure_issues) = 0)
+                )";
+            } else {
+                foreach ($infraList as $idx => $item) {
+                    if (empty($item)) continue;
+                    $paramJson = "infra_json_{$idx}";
+                    $paramLike = "infra_like_{$idx}";
+                    $where .= " AND (
+                        (v.infrastructure_issues IS NOT NULL AND JSON_VALID(v.infrastructure_issues) = 1 AND JSON_CONTAINS(v.infrastructure_issues, :{$paramJson}))
+                        OR v.infrastructure_issues LIKE :{$paramLike}
+                    )";
+                    $bindings[$paramJson] = json_encode($item);
+                    $bindings[$paramLike] = '%' . $item . '%';
+                }
             }
 
             // ----------------------------------------------------------------
